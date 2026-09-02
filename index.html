@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickMart - Shop Counter & Inventory POS</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts & Lucide Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js for Reports -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- QRCode.js for dynamic UPI QR generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- HTML5-QRCode for Camera Barcode Scanning -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Custom Styles & Print Stylesheets -->
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/print.css">
+</head>
+<body class="h-full flex overflow-hidden select-none">
+
+  <!-- ========================================================
+       DESKTOP FIXED SIDEBAR
+       ======================================================== -->
+  <aside id="desktop-sidebar" class="hidden md:flex flex-col w-64 bg-slate-900 text-slate-300 border-r border-slate-800 flex-shrink-0 z-20 transition-all duration-300">
+    
+    <!-- Shop Branding Header -->
+    <div class="p-5 border-b border-slate-800 flex items-center space-x-3 bg-slate-950/40">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30 font-black text-lg">
+        QM
+      </div>
+      <div class="overflow-hidden">
+        <h1 class="shop-brand-name font-black text-white text-sm tracking-tight truncate">My Shop Counter</h1>
+        <p class="shop-brand-tagline text-[11px] text-slate-400 truncate">POS & Inventory</p>
+      </div>
+    </div>
+
+    <!-- Navigation Menu Items -->
+    <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1 text-xs font-semibold">
+      <button data-view="dashboard" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300">
+        <i data-lucide="layout-dashboard" class="w-4 h-4 text-slate-400"></i>
+        <span>Dashboard</span>
+      </button>
+
+      <button data-view="sale" class="nav-link-btn w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300 group">
+        <div class="flex items-center space-x-3">
+          <i data-lucide="shopping-cart" class="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform"></i>
+          <span class="font-bold text-white">New Sale</span>
+        </div>
+        <kbd class="px-1.5 py-0.5 text-[9px] font-mono bg-slate-800 text-indigo-300 border border-slate-700 rounded">F1</kbd>
+      </button>
+
+      <button data-view="products" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300">
+        <i data-lucide="package" class="w-4 h-4 text-slate-400"></i>
+        <span>Products Catalog</span>
+      </button>
+
+      <button data-view="stock" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300">
+        <i data-lucide="boxes" class="w-4 h-4 text-slate-400"></i>
+        <span>Stock Management</span>
+      </button>
+
+      <button data-view="bills" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300">
+        <i data-lucide="receipt" class="w-4 h-4 text-slate-400"></i>
+        <span>Bills / Invoices</span>
+      </button>
+
+      <button data-view="customers" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300">
+        <i data-lucide="users" class="w-4 h-4 text-slate-400"></i>
+        <span>Customers</span>
+      </button>
+
+      <button data-view="expenses" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300">
+        <i data-lucide="wallet" class="w-4 h-4 text-slate-400"></i>
+        <span>Expenses</span>
+      </button>
+
+      <button data-view="reports" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300">
+        <i data-lucide="trending-up" class="w-4 h-4 text-slate-400"></i>
+        <span>Reports & Profit</span>
+      </button>
+
+      <button data-view="settings" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl transition-all hover:bg-slate-800/80 hover:text-white text-slate-300">
+        <i data-lucide="settings" class="w-4 h-4 text-slate-400"></i>
+        <span>Settings & UPI</span>
+      </button>
+    </nav>
+
+    <!-- Bottom User Status & Google Auth Card -->
+    <div class="p-3.5 border-t border-slate-800 bg-slate-950/60">
+      
+      <!-- Logged In State -->
+      <div class="auth-logged-in-box hidden flex items-center justify-between">
+        <div class="flex items-center space-x-2.5 overflow-hidden">
+          <div class="auth-user-avatar w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white overflow-hidden flex-shrink-0">
+            <span class="font-bold text-xs">GC</span>
+          </div>
+          <div class="overflow-hidden">
+            <div class="auth-user-name text-xs font-bold text-white truncate">Store Owner</div>
+            <div class="auth-user-email text-[10px] text-slate-400 truncate">Google Auth</div>
+          </div>
+        </div>
+        <button class="auth-signout-btn p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors" title="Sign Out">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Logged Out / Guest State -->
+      <div class="auth-logged-out-box space-y-2">
+        <button class="google-signin-btn w-full py-2 px-3 bg-white hover:bg-slate-100 text-slate-800 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition-all">
+          <svg class="w-4 h-4" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/>
+            <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+          </svg>
+          <span>Sign In with Google</span>
+        </button>
+        <div class="text-[10px] text-emerald-400 flex items-center justify-center gap-1 font-semibold">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Mobile Local Storage Ready
+        </div>
+      </div>
+
+    </div>
+
+  </aside>
+
+  <!-- ========================================================
+       MOBILE DRAWER SIDEBAR
+       ======================================================== -->
+  <div id="mobile-drawer-backdrop" class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs hidden md:hidden"></div>
+  <aside id="mobile-sidebar-drawer" class="fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 text-slate-300 flex flex-col -translate-x-full transition-transform duration-300 md:hidden shadow-2xl">
+    <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black">QM</div>
+        <div>
+          <h2 class="shop-brand-name font-bold text-white text-sm">My Shop</h2>
+          <p class="text-[10px] text-slate-400">Mobile POS Counter</p>
+        </div>
+      </div>
+      <button id="close-mobile-drawer-btn" class="p-2 text-slate-400 hover:text-white rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+
+    <!-- Mobile Auth Card -->
+    <div class="p-3 bg-slate-950/40 border-b border-slate-800">
+      <div class="auth-logged-in-box hidden flex items-center justify-between">
+        <div class="flex items-center space-x-2 overflow-hidden">
+          <div class="auth-user-avatar w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs"></div>
+          <div class="overflow-hidden">
+            <div class="auth-user-name text-xs font-bold text-white truncate">User</div>
+            <div class="auth-user-email text-[9px] text-slate-400 truncate">user@gmail.com</div>
+          </div>
+        </div>
+        <button class="auth-signout-btn p-1 text-slate-400 hover:text-rose-400"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+      </div>
+
+      <div class="auth-logged-out-box">
+        <button class="google-signin-btn w-full py-2 bg-white text-slate-800 font-bold rounded-xl text-xs flex items-center justify-center gap-2">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
+          <span>Sign In with Google</span>
+        </button>
+      </div>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1.5 text-xs font-semibold">
+      <button data-view="dashboard" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-slate-300"><i data-lucide="layout-dashboard" class="w-4 h-4"></i><span>Dashboard</span></button>
+      <button data-view="sale" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-white font-bold"><i data-lucide="shopping-cart" class="w-4 h-4 text-indigo-400"></i><span>New Sale</span></button>
+      <button data-view="products" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-slate-300"><i data-lucide="package" class="w-4 h-4"></i><span>Products</span></button>
+      <button data-view="stock" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-slate-300"><i data-lucide="boxes" class="w-4 h-4"></i><span>Stock</span></button>
+      <button data-view="bills" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-slate-300"><i data-lucide="receipt" class="w-4 h-4"></i><span>Bills & History</span></button>
+      <button data-view="customers" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-slate-300"><i data-lucide="users" class="w-4 h-4"></i><span>Customers</span></button>
+      <button data-view="expenses" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-slate-300"><i data-lucide="wallet" class="w-4 h-4"></i><span>Expenses</span></button>
+      <button data-view="reports" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-slate-300"><i data-lucide="trending-up" class="w-4 h-4"></i><span>Reports</span></button>
+      <button data-view="settings" class="nav-link-btn w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl hover:bg-slate-800 text-slate-300"><i data-lucide="settings" class="w-4 h-4"></i><span>Settings</span></button>
+    </nav>
+  </aside>
+
+  <!-- ========================================================
+       MAIN APP WORKSPACE
+       ======================================================== -->
+  <div class="flex-1 flex flex-col h-full overflow-hidden">
+    
+    <!-- Top Header Navigation Bar -->
+    <header class="h-14 bg-white border-b border-slate-200/80 px-4 md:px-6 flex items-center justify-between flex-shrink-0 z-10 shadow-xs">
+      
+      <!-- Mobile hamburger + Breadcrumbs -->
+      <div class="flex items-center space-x-3">
+        <button id="mobile-menu-toggle-btn" class="md:hidden p-2 -ml-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100">
+          <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+        <div class="flex items-center space-x-2 text-xs font-semibold text-slate-700">
+          <span class="shop-brand-name font-bold text-slate-900">My Shop</span>
+          <span class="text-slate-300">/</span>
+          <span id="live-counter-clock" class="text-slate-500 font-mono text-[11px]"></span>
+        </div>
+      </div>
+
+      <!-- Right Quick Actions -->
+      <div class="flex items-center space-x-2 md:space-x-3">
+        <!-- Google sign in header pill -->
+        <button class="google-signin-btn auth-logged-out-box hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition-colors">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
+          <span>Google Login</span>
+        </button>
+
+        <!-- Keyboard shortcuts button -->
+        <button id="header-shortcuts-btn" class="hidden sm:flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors" title="Keyboard Shortcuts (?)">
+          <i data-lucide="keyboard" class="w-3.5 h-3.5"></i>
+          <span>Shortcuts</span>
+        </button>
+
+        <!-- Quick New Sale button -->
+        <button id="header-quick-sale-btn" class="flex items-center space-x-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-indigo-600/20 transition-all active:scale-95">
+          <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+          <span>New Sale (F1)</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Scrollable View Container -->
+    <main class="flex-1 overflow-y-auto relative pb-16 md:pb-0">
+      
+      <!-- ========================================================
+           VIEW 1: DASHBOARD
+           ======================================================== -->
+      <section id="view-dashboard" class="app-view p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+        
+        <!-- Welcome Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight">Counter Overview</h2>
+            <p class="text-xs text-slate-500">Live sales performance, low-stock warnings, and recent counter activity</p>
+          </div>
+          <button onclick="window.app.navigate('sale')" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-all self-start">
+            <i data-lucide="shopping-bag" class="w-4 h-4"></i> Start New Billing
+          </button>
+        </div>
+
+        <!-- Top 4 Metric Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Card 1: Today's Sales -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div>
+              <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Today's Sales</p>
+              <h3 id="dash-today-sales" class="text-xl md:text-2xl font-black text-slate-900 mt-0.5 font-mono">₹0.00</h3>
+            </div>
+            <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="indian-rupee" class="w-5 h-5"></i></div>
+          </div>
+
+          <!-- Card 2: Today's Orders -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div>
+              <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Today's Bills</p>
+              <h3 id="dash-today-orders" class="text-xl md:text-2xl font-black text-slate-900 mt-0.5">0 Bills</h3>
+            </div>
+            <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="receipt" class="w-5 h-5"></i></div>
+          </div>
+
+          <!-- Card 3: Low Stock Items -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between cursor-pointer hover:border-amber-400 transition-colors" onclick="window.app.navigate('stock')">
+            <div>
+              <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Stock Alerts</p>
+              <h3 id="dash-low-stock-count" class="text-xl md:text-2xl font-black text-amber-600 mt-0.5">0 Items</h3>
+            </div>
+            <div class="p-3 bg-amber-50 text-amber-600 rounded-xl"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
+          </div>
+
+          <!-- Card 4: Total Products -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between cursor-pointer hover:border-indigo-400 transition-colors" onclick="window.app.navigate('products')">
+            <div>
+              <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Products</p>
+              <h3 id="dash-total-products" class="text-xl md:text-2xl font-black text-slate-900 mt-0.5">0</h3>
+            </div>
+            <div class="p-3 bg-purple-50 text-purple-600 rounded-xl"><i data-lucide="package" class="w-5 h-5"></i></div>
+          </div>
+        </div>
+
+        <!-- Sales Chart & Low Stock Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          <!-- Sales Chart (2 Cols) -->
+          <div class="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h4 class="font-bold text-slate-900 text-sm">7-Day Sales Performance</h4>
+                <p class="text-xs text-slate-400">Daily revenue trends</p>
+              </div>
+              <button onclick="window.app.navigate('reports')" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1">
+                Full Analytics <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+            <div class="h-60 w-full">
+              <canvas id="dash-sales-trend-canvas"></canvas>
+            </div>
+          </div>
+
+          <!-- Low Stock Table (1 Col) -->
+          <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-amber-500"></span> Low Stock Warning
+                </h4>
+                <button onclick="window.app.navigate('stock')" class="text-xs text-indigo-600 font-bold hover:underline">Manage</button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                  <thead>
+                    <tr class="text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100">
+                      <th class="pb-2 px-3">Item</th>
+                      <th class="pb-2 px-3">Stock</th>
+                      <th class="pb-2 px-3">Min</th>
+                      <th class="pb-2 px-3 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dash-low-stock-table-body">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <button onclick="window.stock.openAdjustmentModal()" class="w-full mt-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors text-center">
+              + Inward / Add Stock
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Recent Transactions Table -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h4 class="font-bold text-slate-900 text-sm">Recent Counter Invoices</h4>
+              <p class="text-xs text-slate-400">Click any transaction to view or reprint thermal bill</p>
+            </div>
+            <button onclick="window.app.navigate('bills')" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1">
+              View All Bills <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="text-[10px] font-bold text-slate-400 uppercase border-b border-slate-100">
+                  <th class="pb-2.5 px-3">Invoice #</th>
+                  <th class="pb-2.5 px-3">Customer</th>
+                  <th class="pb-2.5 px-3">Amount</th>
+                  <th class="pb-2.5 px-3">Payment</th>
+                  <th class="pb-2.5 px-3 text-right">Time</th>
+                </tr>
+              </thead>
+              <tbody id="dash-recent-sales-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========================================================
+           VIEW 2: POS COUNTER BILLING (SALE)
+           ======================================================== -->
+      <section id="view-sale" class="app-view hidden h-full flex flex-col md:flex-row overflow-hidden bg-slate-100">
+        
+        <!-- Left Panel: Product Search, Category Pills & Grid -->
+        <div class="flex-1 flex flex-col h-full overflow-hidden p-3 md:p-4 gap-3">
+          
+          <!-- Search Bar & Barcode Scanner Trigger -->
+          <div class="bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-2">
+            <div class="relative flex-1">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+              <input type="text" id="pos-search-input" placeholder="Search product name, barcode or SKU (F2)..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            </div>
+            <button id="pos-camera-scan-btn" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors" title="Scan with Camera">
+              <i data-lucide="scan" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Camera Scan</span>
+            </button>
+          </div>
+
+          <!-- Category Filter Pills -->
+          <div class="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none" id="pos-categories-pills">
+            <!-- Populated dynamically -->
+          </div>
+
+          <!-- Products Grid -->
+          <div class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 p-0.5" id="pos-products-container">
+            <!-- Populated dynamically -->
+          </div>
+
+        </div>
+
+        <!-- Right Panel: Current Bill / Cart & Checkout -->
+        <div class="w-full md:w-96 lg:w-[420px] bg-white border-t md:border-t-0 md:border-l border-slate-200 flex flex-col h-full flex-shrink-0 shadow-lg z-10">
+          
+          <!-- Cart Header: Customer & Items Count -->
+          <div class="p-3.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+            <div class="flex items-center space-x-2 overflow-hidden">
+              <button id="pos-select-customer-btn" class="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl transition-colors" title="Change Customer (F3)">
+                <i data-lucide="user-check" class="w-4 h-4"></i>
+              </button>
+              <div class="overflow-hidden">
+                <div class="text-[10px] text-slate-400 font-bold uppercase">Customer</div>
+                <div id="pos-selected-customer-name" class="text-xs font-bold text-slate-900 truncate">Walk-in Customer</div>
+              </div>
+            </div>
+
+            <div class="flex items-center space-x-1.5">
+              <span id="pos-cart-count-badge" class="px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-black font-mono">0 items</span>
+              <button id="pos-clear-cart-btn" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors" title="Clear Cart">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Cart Items Scrollable List -->
+          <div class="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50/50" id="pos-cart-items">
+            <!-- Items injected dynamically -->
+          </div>
+
+          <!-- Empty Cart State -->
+          <div id="pos-cart-empty-state" class="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
+            <i data-lucide="shopping-bag" class="w-12 h-12 opacity-30 mb-2"></i>
+            <p class="font-bold text-xs text-slate-600">Bill Cart is Empty</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Click products on left or scan barcode to add to bill</p>
+          </div>
+
+          <!-- Bill Summary Calculation -->
+          <div class="p-3.5 border-t border-slate-200 bg-white space-y-1.5 text-xs">
+            <div class="flex justify-between text-slate-600">
+              <span>Subtotal:</span>
+              <span id="pos-summary-subtotal" class="font-bold text-slate-900 font-mono">₹0.00</span>
+            </div>
+            <div class="flex justify-between text-slate-600">
+              <span>Discount:</span>
+              <span id="pos-summary-discount" class="font-bold text-emerald-600 font-mono">-₹0.00</span>
+            </div>
+            <div class="flex justify-between text-slate-600">
+              <span>Tax (GST):</span>
+              <span id="pos-summary-tax" class="font-medium text-slate-600 font-mono">+₹0.00</span>
+            </div>
+            <div class="flex justify-between items-baseline pt-2 border-t border-slate-200 font-black">
+              <span class="text-sm text-slate-900 uppercase">Payable Total:</span>
+              <span id="pos-summary-grandtotal" class="text-xl text-indigo-600 font-mono">₹0.00</span>
+            </div>
+          </div>
+
+          <!-- Payment Methods & Checkout Controls -->
+          <div class="p-3.5 bg-slate-50 border-t border-slate-200 space-y-3">
+            
+            <!-- Method Selector Tabs -->
+            <div class="flex gap-1 bg-slate-200/70 p-1 rounded-xl">
+              <button data-method="CASH" class="pos-pay-method-btn flex-1 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm transition-all">
+                Cash
+              </button>
+              <button data-method="UPI" class="pos-pay-method-btn flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-white transition-all">
+                UPI / QR
+              </button>
+              <button data-method="CARD" class="pos-pay-method-btn flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-white transition-all">
+                Card
+              </button>
+              <button data-method="SPLIT" class="pos-pay-method-btn flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-white transition-all">
+                Split
+              </button>
+            </div>
+
+            <!-- Cash Tender Controls -->
+            <div id="pos-cash-tender-container" class="space-y-2">
+              <div class="flex items-center gap-2">
+                <input type="number" id="pos-cash-tendered-input" placeholder="Tendered cash (₹)" class="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500">
+                <div class="text-right whitespace-nowrap">
+                  <div class="text-[9px] text-slate-400 uppercase font-bold">Change</div>
+                  <div id="pos-cash-change-display" class="text-xs font-black text-emerald-600 font-mono">₹0.00</div>
+                </div>
+              </div>
+              <div class="flex gap-1 text-[10px] font-bold">
+                <button data-amt="exact" class="pos-quick-cash-btn flex-1 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg">Exact</button>
+                <button data-amt="100" class="pos-quick-cash-btn flex-1 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg">₹100</button>
+                <button data-amt="500" class="pos-quick-cash-btn flex-1 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg">₹500</button>
+                <button data-amt="1000" class="pos-quick-cash-btn flex-1 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg">₹1000</button>
+                <button data-amt="2000" class="pos-quick-cash-btn flex-1 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg">₹2000</button>
+              </div>
+            </div>
+
+            <!-- Main Pay Button (F4) -->
+            <button id="pos-complete-sale-btn" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black rounded-xl text-sm shadow-md shadow-emerald-600/30 transition-all flex items-center justify-center gap-2">
+              <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+              <span>Complete Sale (<span id="pos-pay-btn-amount">₹0.00</span>)</span>
+              <kbd class="ml-1 px-1.5 py-0.5 text-[10px] bg-emerald-800 rounded">F4</kbd>
+            </button>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ========================================================
+           VIEW 3: PRODUCTS CATALOG
+           ======================================================== -->
+      <section id="view-products" class="app-view hidden p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight">Products Catalog</h2>
+            <p class="text-xs text-slate-500">Manage item details, pricing, barcodes, GST taxes, and stock limits</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span id="products-total-count-badge" class="px-3 py-1.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs">0 Products</span>
+            <button id="products-add-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-4 h-4"></i> Add Product
+            </button>
+          </div>
+        </div>
+
+        <!-- Filters & Search Bar -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap gap-3 items-center justify-between">
+          <div class="relative flex-1 min-w-[240px]">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+            <input type="text" id="products-search-input" placeholder="Search by name, barcode, SKU or brand..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="products-filter-category" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold">
+              <option value="ALL">All Categories</option>
+            </select>
+            <select id="products-filter-stock" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold">
+              <option value="ALL">All Stock Status</option>
+              <option value="GOOD">In Stock</option>
+              <option value="LOW">Low Stock</option>
+              <option value="OUT">Out of Stock</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Products Table -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 border-b border-slate-200">
+                  <th class="py-3 px-4">Product / SKU</th>
+                  <th class="py-3 px-4">Category</th>
+                  <th class="py-3 px-4">Selling Price</th>
+                  <th class="py-3 px-4">Cost Price</th>
+                  <th class="py-3 px-4">Tax %</th>
+                  <th class="py-3 px-4">Stock</th>
+                  <th class="py-3 px-4">Status</th>
+                  <th class="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="products-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================
+           VIEW 4: STOCK MANAGEMENT & MOVEMENTS
+           ======================================================== -->
+      <section id="view-stock" class="app-view hidden p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight">Stock & Inventory Movements</h2>
+            <p class="text-xs text-slate-500">Track stock audits, inward shipments, damage write-offs, and movement history</p>
+          </div>
+          <button id="stock-inward-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i> Inward / Adjust Stock
+          </button>
+        </div>
+
+        <!-- Low Stock Alert Banner -->
+        <div id="stock-alert-banner" class="hidden p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
+          <!-- Injected dynamically -->
+        </div>
+
+        <!-- Summary Metrics -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[11px] font-bold text-slate-400 uppercase">Total Inventory Items</div>
+            <div id="stock-metric-total-items" class="text-xl font-black text-slate-900 mt-1">0</div>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[11px] font-bold text-slate-400 uppercase">Low Stock SKUs</div>
+            <div id="stock-metric-low-stock" class="text-xl font-black text-amber-600 mt-1">0</div>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[11px] font-bold text-slate-400 uppercase">Out of Stock SKUs</div>
+            <div id="stock-metric-out-stock" class="text-xl font-black text-rose-600 mt-1">0</div>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[11px] font-bold text-slate-400 uppercase">Total Stock Valuation</div>
+            <div id="stock-metric-total-value" class="text-xl font-black text-indigo-600 mt-1 font-mono">₹0</div>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs: Audit vs Movements -->
+        <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div class="flex gap-2 bg-white p-1 rounded-xl border border-slate-200">
+            <button id="stock-tab-audit-btn" class="px-4 py-2 font-bold text-xs rounded-xl bg-indigo-600 text-white shadow-sm transition-all">
+              Live Stock Audit
+            </button>
+            <button id="stock-tab-mov-btn" class="px-4 py-2 font-bold text-xs rounded-xl text-slate-600 hover:bg-slate-100 transition-all">
+              Movement Audit Log
+            </button>
+          </div>
+          <div class="relative w-64">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+            <input type="text" id="stock-search-input" placeholder="Search item..." class="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <!-- Table 1: Live Stock Audit View -->
+        <div id="stock-audit-view-container" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 border-b border-slate-200">
+                  <th class="py-3 px-4">Product Name</th>
+                  <th class="py-3 px-4">Current Stock</th>
+                  <th class="py-3 px-4">Min Stock</th>
+                  <th class="py-3 px-4">Max Stock</th>
+                  <th class="py-3 px-4">Inventory Value</th>
+                  <th class="py-3 px-4">Status</th>
+                  <th class="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="stock-table-body">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Table 2: Movement Audit Log View -->
+        <div id="stock-movements-view-container" class="hidden bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 border-b border-slate-200">
+                  <th class="py-3 px-4">Timestamp</th>
+                  <th class="py-3 px-4">Product</th>
+                  <th class="py-3 px-4">Movement Type</th>
+                  <th class="py-3 px-4">Quantity Change</th>
+                  <th class="py-3 px-4">Old → New Stock</th>
+                  <th class="py-3 px-4">Notes / Invoice Ref</th>
+                </tr>
+              </thead>
+              <tbody id="stock-movements-table-body">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========================================================
+           VIEW 5: BILLS / INVOICES HISTORY
+           ======================================================== -->
+      <section id="view-bills" class="app-view hidden p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight">Bills & Invoice History</h2>
+            <p class="text-xs text-slate-500">Search past bills, view thermal receipt copies, and reprint bills</p>
+          </div>
+          <span id="bills-total-count-badge" class="px-3 py-1.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs">0 Invoices</span>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center">
+          <div class="relative flex-1">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+            <input type="text" id="bills-search-input" placeholder="Search by invoice number (e.g. INV-1001), customer name or phone..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <!-- Invoices Table -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 border-b border-slate-200">
+                  <th class="py-3 px-4">Invoice #</th>
+                  <th class="py-3 px-4">Date & Time</th>
+                  <th class="py-3 px-4">Customer</th>
+                  <th class="py-3 px-4">Items</th>
+                  <th class="py-3 px-4">Grand Total</th>
+                  <th class="py-3 px-4">Payment Method</th>
+                  <th class="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="bills-table-body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================
+           VIEW 6: CUSTOMERS DIRECTORY
+           ======================================================== -->
+      <section id="view-customers" class="app-view hidden p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight">Customer Management</h2>
+            <p class="text-xs text-slate-500">Directory of registered counter customers and shopping history</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span id="customers-total-count-badge" class="px-3 py-1.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs">0 Customers</span>
+            <button id="customers-add-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5">
+              <i data-lucide="user-plus" class="w-4 h-4"></i> Add Customer
+            </button>
+          </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+            <input type="text" id="customers-search-input" placeholder="Search customer by name, phone or email..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <!-- Customers Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 border-b border-slate-200">
+                  <th class="py-3 px-4">Customer Name & Address</th>
+                  <th class="py-3 px-4">Phone Number</th>
+                  <th class="py-3 px-4">Email</th>
+                  <th class="py-3 px-4">Total Spent</th>
+                  <th class="py-3 px-4">Orders</th>
+                  <th class="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="customers-table-body">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================
+           VIEW 7: EXPENSES
+           ======================================================== -->
+      <section id="view-expenses" class="app-view hidden p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight">Shop Operating Expenses</h2>
+            <p class="text-xs text-slate-500">Record shop expenditures like Rent, Electricity, Packaging, Wages & Tea</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <div class="px-3.5 py-1.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-800">
+              Total: <span id="expenses-total-amount" class="font-mono font-black">₹0.00</span>
+            </div>
+            <button id="expenses-add-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-4 h-4"></i> Add Expense
+            </button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap gap-3 items-center justify-between">
+          <div class="relative flex-1 min-w-[200px]">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
+            <input type="text" id="expenses-search-input" placeholder="Search expense description..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <select id="expenses-filter-category" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold">
+            <option value="ALL">All Categories</option>
+            <option value="Rent">Rent</option>
+            <option value="Electricity">Electricity</option>
+            <option value="Packaging">Packaging</option>
+            <option value="Wages">Wages</option>
+            <option value="Maintenance">Maintenance</option>
+          </select>
+        </div>
+
+        <!-- Expenses Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead>
+                <tr class="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 border-b border-slate-200">
+                  <th class="py-3 px-4">Date</th>
+                  <th class="py-3 px-4">Category</th>
+                  <th class="py-3 px-4">Description</th>
+                  <th class="py-3 px-4">Amount</th>
+                  <th class="py-3 px-4">Mode</th>
+                  <th class="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="expenses-table-body">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================
+           VIEW 8: REPORTS & PROFIT ANALYTICS
+           ======================================================== -->
+      <section id="view-reports" class="app-view hidden p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight">Sales & Profit Reports</h2>
+            <p class="text-xs text-slate-500">Gross profit estimation, sales trends, payment mode share, and product volume</p>
+          </div>
+          <div class="flex items-center space-x-2">
+            <!-- Period Filter Pills -->
+            <div class="flex bg-white p-1 rounded-xl border border-slate-200">
+              <button data-days="1" class="report-days-filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100">Today</button>
+              <button data-days="7" class="report-days-filter-btn px-3 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 text-white shadow-sm">7 Days</button>
+              <button data-days="30" class="report-days-filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100">30 Days</button>
+            </div>
+            <button id="report-export-csv-btn" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i> Export CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Profit & Revenue Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-6 gap-3">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Sales Revenue</div>
+            <div id="report-metric-revenue" class="text-xl font-black text-indigo-600 mt-1 font-mono">₹0</div>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Gross Profit</div>
+            <div id="report-metric-gross-profit" class="text-xl font-black text-emerald-600 mt-1 font-mono">₹0</div>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Total Expenses</div>
+            <div id="report-metric-expenses" class="text-xl font-black text-rose-600 mt-1 font-mono">₹0</div>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Est. Net Profit</div>
+            <div id="report-metric-net-profit" class="text-xl font-black text-emerald-600 mt-1 font-mono">₹0</div>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Total Bills</div>
+            <div id="report-metric-bills" class="text-xl font-black text-slate-900 mt-1">0</div>
+          </div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="text-[10px] font-bold text-slate-400 uppercase">Avg Bill Value</div>
+            <div id="report-metric-avg-bill" class="text-xl font-black text-slate-900 mt-1 font-mono">₹0</div>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <h4 class="font-bold text-slate-900 text-sm mb-4">Sales & Profit Trend</h4>
+            <div class="h-64 w-full">
+              <canvas id="reports-sales-trend-canvas"></canvas>
+            </div>
+          </div>
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <h4 class="font-bold text-slate-900 text-sm mb-4">Payment Methods Share</h4>
+            <div class="h-64 w-full flex items-center justify-center">
+              <canvas id="reports-payment-methods-canvas"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Products Bar -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <h4 class="font-bold text-slate-900 text-sm mb-4">Top 5 Best-Selling Products</h4>
+          <div class="h-56 w-full">
+            <canvas id="reports-top-products-canvas"></canvas>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========================================================
+           VIEW 9: SETTINGS & SUPABASE GOOGLE AUTH
+           ======================================================== -->
+      <section id="view-settings" class="app-view hidden p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight">Shop Settings & Supabase Cloud</h2>
+            <p class="text-xs text-slate-500">Configure store metadata, UPI payment QR, thermal printing, and Supabase Google login</p>
+          </div>
+        </div>
+
+        <form id="settings-form" class="space-y-6 text-xs">
+          
+          <!-- Shop Profile Card -->
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div class="flex items-center gap-2 text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">
+              <i data-lucide="store" class="w-4 h-4 text-indigo-600"></i>
+              <span>Store Information</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Shop / Store Name *</label>
+                <input type="text" id="set-shop-name" required class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Tagline / Subtitle</label>
+                <input type="text" id="set-tagline" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Contact Phone *</label>
+                <input type="text" id="set-phone" required class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Alternative Phone</label>
+                <input type="text" id="set-alt-phone" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">GSTIN Number</label>
+                <input type="text" id="set-gst-number" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono uppercase font-bold focus:ring-2 focus:ring-indigo-500">
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Shop Address</label>
+              <textarea id="set-address" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">City</label>
+                <input type="text" id="set-city" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">State</label>
+                <input type="text" id="set-state" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Pincode</label>
+                <input type="text" id="set-pincode" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500">
+              </div>
+            </div>
+          </div>
+
+          <!-- UPI & Payments Setup Card -->
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div class="flex items-center gap-2 text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">
+              <i data-lucide="qr-code" class="w-4 h-4 text-emerald-600"></i>
+              <span>UPI & Digital Payment QR Details</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Store UPI ID (VPA) *</label>
+                <input type="text" id="set-upi-id" required placeholder="shop@okaxis or yourname@upi" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-emerald-700 focus:ring-2 focus:ring-indigo-500">
+                <p class="text-[10px] text-slate-400 mt-1">Used to generate dynamic QR with exact bill amount</p>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">GPay / PhonePe Mobile Number</label>
+                <input type="text" id="set-gpay-number" placeholder="9876543210" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Payee Display Name</label>
+                <input type="text" id="set-payment-name" placeholder="My Shop Counter" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+              </div>
+            </div>
+          </div>
+
+          <!-- Invoice & Print Preferences Card -->
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div class="flex items-center gap-2 text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">
+              <i data-lucide="printer" class="w-4 h-4 text-indigo-600"></i>
+              <span>Receipt & Printer Settings</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Default Receipt Format</label>
+                <select id="set-receipt-format" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold focus:ring-2 focus:ring-indigo-500">
+                  <option value="80mm">80mm Thermal Receipt (Standard)</option>
+                  <option value="58mm">58mm Mini Thermal Receipt</option>
+                  <option value="a4">A4 Full Tax Invoice</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Invoice Prefix</label>
+                <input type="text" id="set-invoice-prefix" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono font-bold focus:ring-2 focus:ring-indigo-500">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Starting Invoice Number</label>
+                <input type="number" id="set-start-invoice-num" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4 pt-2">
+              <label class="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" id="set-show-qr" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                <span class="font-semibold text-slate-700">Print UPI QR on Bill</span>
+              </label>
+              <label class="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" id="set-show-gst" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                <span class="font-semibold text-slate-700">Print GSTIN on Bill</span>
+              </label>
+              <label class="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" id="set-show-address" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                <span class="font-semibold text-slate-700">Print Address on Bill</span>
+              </label>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Receipt Footer Message</label>
+              <input type="text" id="set-footer-msg" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+            </div>
+          </div>
+
+          <!-- Supabase Cloud Connection & Google Auth -->
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div class="flex items-center gap-2 text-sm font-bold text-slate-900">
+                <i data-lucide="database" class="w-4 h-4 text-emerald-600"></i>
+                <span>Supabase Cloud & Google Authentication</span>
+              </div>
+              <button type="button" id="settings-test-supabase-btn" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs">
+                Test Connection
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Supabase Project URL</label>
+                <input type="url" id="set-supabase-url" placeholder="https://your-ref.supabase.co" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Supabase Anon Key</label>
+                <input type="password" id="set-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5..." class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500">
+              </div>
+            </div>
+
+            <!-- Quick Google Auth Trigger in Settings -->
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+              <div>
+                <div class="font-bold text-slate-900">Google OAuth Account Login</div>
+                <div class="text-[11px] text-slate-500">Sign in with Google to sync shop across multiple devices and tablets</div>
+              </div>
+              <button type="button" class="google-signin-btn px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs">
+                <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
+                <span>Continue with Google</span>
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <p class="text-[11px] text-slate-400">Database schema is located in <code class="text-indigo-600 font-mono">sql/schema.sql</code></p>
+              <button type="button" id="settings-push-supabase-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm">
+                Pull Cloud Data to Mobile
+              </button>
+            </div>
+          </div>
+
+          <!-- Save Button -->
+          <div class="flex justify-end">
+            <button type="submit" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 transition-all">
+              Save All Settings
+            </button>
+          </div>
+
+        </form>
+
+        <!-- Backup & Demo Reset -->
+        <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200/80 space-y-3">
+          <div class="font-bold text-slate-800 text-xs uppercase tracking-wider">Data Backup & Demo Tools</div>
+          <div class="flex flex-wrap gap-3 items-center">
+            <button id="settings-export-backup-btn" class="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs">
+              <i data-lucide="download" class="w-4 h-4"></i> Download JSON Backup
+            </button>
+            <label class="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs cursor-pointer">
+              <i data-lucide="upload" class="w-4 h-4"></i> Restore from JSON
+              <input type="file" id="settings-import-backup-file" accept=".json" class="hidden">
+            </label>
+            <button id="settings-load-demo-btn" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold rounded-xl text-xs flex items-center gap-1.5">
+              <i data-lucide="sparkles" class="w-4 h-4"></i> Load Sample Demo Products
+            </button>
+            <button id="settings-reset-clean-btn" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center gap-1.5 ml-auto">
+              <i data-lucide="trash-2" class="w-4 h-4"></i> Reset to Empty Store
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- ========================================================
+         MOBILE BOTTOM NAVIGATION BAR
+         ======================================================== -->
+    <nav class="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 px-2 py-2 flex items-center justify-around z-30 shadow-lg text-[10px]">
+      <button data-view="dashboard" class="mobile-bottom-nav-btn flex flex-col items-center py-1 text-slate-500 font-medium">
+        <i data-lucide="layout-dashboard" class="w-5 h-5 mb-0.5"></i>
+        <span>Home</span>
+      </button>
+
+      <button data-view="sale" class="mobile-bottom-nav-btn flex flex-col items-center py-1 text-indigo-600 font-bold">
+        <div class="p-2 -mt-4 bg-indigo-600 text-white rounded-full shadow-lg shadow-indigo-600/40">
+          <i data-lucide="shopping-cart" class="w-5 h-5"></i>
+        </div>
+        <span class="mt-0.5">Sale</span>
+      </button>
+
+      <button data-view="stock" class="mobile-bottom-nav-btn flex flex-col items-center py-1 text-slate-500 font-medium">
+        <i data-lucide="boxes" class="w-5 h-5 mb-0.5"></i>
+        <span>Stock</span>
+      </button>
+
+      <button data-view="bills" class="mobile-bottom-nav-btn flex flex-col items-center py-1 text-slate-500 font-medium">
+        <i data-lucide="receipt" class="w-5 h-5 mb-0.5"></i>
+        <span>Bills</span>
+      </button>
+
+      <button onclick="window.app.openMobileDrawer()" class="flex flex-col items-center py-1 text-slate-500 font-medium">
+        <i data-lucide="more-horizontal" class="w-5 h-5 mb-0.5"></i>
+        <span>More</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Application Logic Scripts -->
+  <script src="js/db.js"></script>
+  <script src="js/upi.js"></script>
+  <script src="js/invoices.js"></script>
+  <script src="js/pos.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/stock.js"></script>
+  <script src="js/customers.js"></script>
+  <script src="js/expenses.js"></script>
+  <script src="js/reports.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
