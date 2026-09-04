@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# shopflow
-POS FOR SHOP KEEPERS
-=======
-# 🛍️ QuickMart POS & Inventory Management System
+# 🛍️ ShopFlow POS - Retail Counter & Inventory Management System
 
 A high-speed, lightweight, responsive **Shop Counter / POS & Inventory Management Web Application** designed for retail counters, grocery stores, supermarkets, and billing kiosks.
 

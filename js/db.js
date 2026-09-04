@@ -13,7 +13,7 @@ const DB_KEYS = {
   STOCK_MOVEMENTS: 'pos_stock_movements',
   EXPENSES: 'pos_expenses',
   AUTH_USER: 'pos_auth_user',
-  INITIALIZED: 'pos_db_initialized_v3'
+  INITIALIZED: 'pos_db_initialized_v4'
 };
 
 // Default Initial Settings pre-configured with user's Supabase instance
@@ -42,8 +42,8 @@ const DEFAULT_SETTINGS = {
   showAddressOnBill: true,
   footerMessage: 'Thank you for shopping with us! Visit again.',
   taxRateDefault: 5,
-  supabaseUrl: 'https://pilfsqplgeljxhgcmujq.supabase.co',
-  supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpbGZzcXBsZ2VsanhoZ2NtdWpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNzQ5MTMsImV4cCI6MjEwMzg1MDkxM30.CiFSFJS5vTb3jA_Payyf5m1CCJbbHig1ig8-6TtwxLg'
+  supabaseUrl: 'https://eguloiwnffjpxvpfyfmg.supabase.co',
+  supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVndWxvaXduZmZqcHh2cGZ5Zm1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjkwNDIsImV4cCI6MjEwNDEwNTA0Mn0.WT1PpciNUBVaL0McygLRXZXg-MIZIamvRHtd8To0DVE'
 };
 
 // Standard Retail Starter Categories

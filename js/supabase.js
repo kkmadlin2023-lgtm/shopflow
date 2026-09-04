@@ -13,8 +13,8 @@ class SupabaseSyncManager {
   async init() {
     const settings = window.db.getSettings();
     // Default project credentials
-    const url = settings.supabaseUrl || 'https://pilfsqplgeljxhgcmujq.supabase.co';
-    const key = settings.supabaseKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpbGZzcXBsZ2VsanhoZ2NtdWpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNzQ5MTMsImV4cCI6MjEwMzg1MDkxM30.CiFSFJS5vTb3jA_Payyf5m1CCJbbHig1ig8-6TtwxLg';
+    const url = settings.supabaseUrl || 'https://eguloiwnffjpxvpfyfmg.supabase.co';
+    const key = settings.supabaseKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVndWxvaXduZmZqcHh2cGZ5Zm1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjkwNDIsImV4cCI6MjEwNDEwNTA0Mn0.WT1PpciNUBVaL0McygLRXZXg-MIZIamvRHtd8To0DVE';
 
     if (window.supabase) {
       try {
