@@ -119,3 +119,33 @@ input[type="number"] {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
+
+/* Mobile Bottom Floating Cart Bar */
+#pos-mobile-floating-cart-bar {
+  animation: slideUpFloat 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUpFloat {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Mobile Cart Drawer slide-in */
+@media (max-width: 767px) {
+  #pos-bill-cart-panel {
+    position: fixed;
+    inset-x: 0;
+    bottom: 0;
+    top: auto;
+    max-height: 88vh;
+    border-radius: 24px 24px 0 0;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 50;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25);
+  }
+
+  #pos-bill-cart-panel.mobile-cart-open {
+    transform: translateY(0);
+  }
+}

@@ -531,10 +531,46 @@ class POSController {
     if (grandTotalEl) grandTotalEl.textContent = `₹${totals.grandTotal.toFixed(2)}`;
     if (payBtnAmountEl) payBtnAmountEl.textContent = `₹${totals.grandTotal.toFixed(2)}`;
 
+    // Update Mobile Floating Cart Bar
+    const mobileFloatingBar = document.getElementById('pos-mobile-floating-cart-bar');
+    const mobileCartItems = document.getElementById('pos-mobile-cart-items-count');
+    const mobileCartTotal = document.getElementById('pos-mobile-cart-total-amount');
+
+    if (mobileFloatingBar) {
+      if (this.cart.length > 0) {
+        mobileFloatingBar.classList.remove('hidden');
+        if (mobileCartItems) mobileCartItems.textContent = `${totals.itemCount} items`;
+        if (mobileCartTotal) mobileCartTotal.textContent = `₹${totals.grandTotal.toFixed(2)}`;
+      } else {
+        mobileFloatingBar.classList.add('hidden');
+      }
+    }
+
     // Update Cash change calculation if cash input is open
     this.updateCashChange();
 
     if (window.lucide) window.lucide.createIcons();
+  }
+
+  toggleMobileCart() {
+    const cartPanel = document.getElementById('pos-bill-cart-panel');
+    const backdrop = document.getElementById('pos-mobile-cart-backdrop');
+    if (!cartPanel) return;
+
+    if (cartPanel.classList.contains('mobile-cart-open')) {
+      cartPanel.classList.remove('mobile-cart-open');
+      backdrop?.classList.add('hidden');
+    } else {
+      cartPanel.classList.add('mobile-cart-open');
+      backdrop?.classList.remove('hidden');
+    }
+  }
+
+  closeMobileCart() {
+    const cartPanel = document.getElementById('pos-bill-cart-panel');
+    const backdrop = document.getElementById('pos-mobile-cart-backdrop');
+    if (cartPanel) cartPanel.classList.remove('mobile-cart-open');
+    if (backdrop) backdrop.classList.add('hidden');
   }
 
   updateCashChange() {
@@ -861,6 +897,19 @@ class POSController {
         }
       });
     }
+
+    // Mobile floating cart triggers
+    document.getElementById('pos-mobile-floating-cart-bar')?.addEventListener('click', () => {
+      this.toggleMobileCart();
+    });
+
+    document.getElementById('close-mobile-cart-btn')?.addEventListener('click', () => {
+      this.closeMobileCart();
+    });
+
+    document.getElementById('pos-mobile-cart-backdrop')?.addEventListener('click', () => {
+      this.closeMobileCart();
+    });
 
     // Customer trigger
     const custBtn = document.getElementById('pos-select-customer-btn');

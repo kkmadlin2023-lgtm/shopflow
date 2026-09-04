@@ -1,6 +1,6 @@
 /**
  * QuickMart POS - Supabase Cloud & Google Authentication Integration
- * Handles Google OAuth, Supabase session state, and bidirectional cross-device synchronization linked to user account.
+ * Provides rock-solid, multi-device cloud synchronization bound to the user's Google Account.
  */
 
 class SupabaseSyncManager {
@@ -8,11 +8,12 @@ class SupabaseSyncManager {
     this.client = null;
     this.isConnected = false;
     this.currentUser = null;
+    this.isSyncing = false;
+    this.realtimeChannel = null;
   }
 
   async init() {
     const settings = window.db.getSettings();
-    // Default project credentials
     const url = settings.supabaseUrl || 'https://eguloiwnffjpxvpfyfmg.supabase.co';
     const key = settings.supabaseKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVndWxvaXduZmZqcHh2cGZ5Zm1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjkwNDIsImV4cCI6MjEwNDEwNTA0Mn0.WT1PpciNUBVaL0McygLRXZXg-MIZIamvRHtd8To0DVE';
 
@@ -27,20 +28,20 @@ class SupabaseSyncManager {
         });
         this.isConnected = true;
 
-        // Check active session
+        // Check active session on startup
         const { data: { session } } = await this.client.auth.getSession();
         if (session && session.user) {
           this.currentUser = session.user;
           this.onUserAuthenticated(session.user);
+          // Initial cloud pull
+          await this.pullCloudData();
         }
 
         // Listen for Auth changes (e.g. after Google OAuth redirect)
         this.client.auth.onAuthStateChange(async (event, session) => {
-          if (event === 'SIGNED_IN' && session?.user) {
+          if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
             this.currentUser = session.user;
             this.onUserAuthenticated(session.user);
-            window.app?.showToast(`Signed in as ${session.user.user_metadata?.full_name || session.user.email}`, 'success');
-            // Fetch cloud data for this user account across devices
             await this.pullCloudData();
           } else if (event === 'SIGNED_OUT') {
             this.currentUser = null;
@@ -49,7 +50,7 @@ class SupabaseSyncManager {
         });
 
       } catch (e) {
-        console.warn('Supabase initialization notice:', e);
+        console.warn('Supabase initialization note:', e);
       }
     }
 
@@ -133,13 +134,8 @@ class SupabaseSyncManager {
     document.querySelectorAll('.auth-logged-in-box').forEach(b => b.classList.remove('hidden'));
     document.querySelectorAll('.auth-logged-out-box').forEach(b => b.classList.add('hidden'));
 
-    // Notify user of cloud connection
-    window.notifications?.notify({
-      title: 'Google Account Connected',
-      body: `Logged in as ${name}. Inventory and sales will sync across all your devices.`,
-      type: 'sync',
-      sound: false
-    });
+    // Enable realtime listener for multi-device sync
+    this.setupRealtimeListener(user.id);
   }
 
   onUserSignedOut() {
@@ -151,184 +147,165 @@ class SupabaseSyncManager {
 
     document.querySelectorAll('.auth-logged-in-box').forEach(b => b.classList.add('hidden'));
     document.querySelectorAll('.auth-logged-out-box').forEach(b => b.classList.remove('hidden'));
-  }
 
-  /**
-   * Push single entity update to Supabase cloud with user_id binding
-   */
-  async pushEntity(tableName, record) {
-    if (!this.client || !this.isConnected) return;
-
-    try {
-      const userId = this.currentUser ? this.currentUser.id : null;
-      let payload = { ...record };
-
-      if (tableName === 'products') {
-        payload = {
-          barcode: record.barcode || null,
-          sku: record.sku || null,
-          name: record.name,
-          short_name: record.shortName || record.name,
-          selling_price: record.sellingPrice,
-          purchase_price: record.purchasePrice || 0,
-          mrp: record.mrp || record.sellingPrice,
-          current_stock: record.currentStock || 0,
-          min_stock: record.minStock || 5,
-          unit: record.unit || 'Pcs',
-          brand: record.brand || null,
-          photo_url: record.photoUrl || null
-        };
-      } else if (tableName === 'sales') {
-        payload = {
-          invoice_number: record.invoiceNumber,
-          customer_name: record.customerName,
-          customer_phone: record.customerPhone,
-          subtotal: record.subtotal,
-          discount_amount: record.discountAmount,
-          tax_amount: record.taxAmount,
-          grand_total: record.grandTotal,
-          purchase_cost_total: record.purchaseCostTotal || 0,
-          gross_profit: record.grossProfit || 0,
-          payment_method: record.paymentMethod,
-          payment_status: record.paymentStatus || 'PAID',
-          cash_received: record.cashReceived || 0,
-          change_returned: record.changeReturned || 0,
-          upi_transaction_id: record.upiTransactionId || null
-        };
-      } else if (tableName === 'customers') {
-        payload = {
-          name: record.name,
-          phone: record.phone || null,
-          email: record.email || null,
-          address: record.address || null,
-          total_spent: record.totalSpent || 0,
-          total_orders: record.totalOrders || 0
-        };
-      } else if (tableName === 'expenses') {
-        payload = {
-          category: record.category,
-          amount: record.amount,
-          date: record.date,
-          description: record.description || null,
-          payment_method: record.paymentMethod || 'CASH'
-        };
-      }
-
-      await this.client.from(tableName).upsert(payload);
-    } catch (e) {
-      console.warn(`Supabase sync note for ${tableName}:`, e.message);
+    if (this.realtimeChannel) {
+      this.client.removeChannel(this.realtimeChannel);
+      this.realtimeChannel = null;
     }
   }
 
   /**
-   * Pulls all user data (products, sales, customers, expenses) from Supabase into mobile localStorage
+   * Pushes full store data (products, sales, customers, stock, settings) to Supabase cloud
+   */
+  async pushAllStoreData() {
+    if (!this.client || !this.currentUser) return;
+
+    try {
+      const storeSnapshot = window.db.exportAllData();
+      const userId = this.currentUser.id;
+      const userEmail = this.currentUser.email || '';
+
+      const { error } = await this.client.from('user_stores').upsert({
+        user_id: userId,
+        user_email: userEmail,
+        store_data: storeSnapshot,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+
+      if (error) {
+        console.warn('Store sync note:', error.message);
+      }
+    } catch (err) {
+      console.warn('Sync push error:', err);
+    }
+  }
+
+  /**
+   * Hook called whenever a single entity (product, sale, expense) is modified locally
+   */
+  async pushEntity(tableName, record) {
+    // Non-blocking full sync snapshot to user_stores
+    this.pushAllStoreData();
+  }
+
+  /**
+   * Pulls all user data from Supabase cloud into the device's local storage
    */
   async pullCloudData() {
+    if (!this.client || !this.currentUser || this.isSyncing) return;
+    this.isSyncing = true;
+
+    try {
+      const userId = this.currentUser.id;
+      const userEmail = this.currentUser.email;
+
+      // 1. Fetch from user_stores snapshot table
+      const { data, error } = await this.client
+        .from('user_stores')
+        .select('*')
+        .or(`user_id.eq.${userId},user_email.eq.${userEmail}`)
+        .maybeSingle();
+
+      if (!error && data && data.store_data) {
+        const cloudData = data.store_data;
+        const localData = window.db.exportAllData();
+
+        // If cloud data exists, merge products and sales intelligently
+        if (cloudData.products && Array.isArray(cloudData.products)) {
+          // Merge products
+          const localProducts = localData.products || [];
+          const mergedProducts = [...cloudData.products];
+          
+          localProducts.forEach(lp => {
+            const idx = mergedProducts.findIndex(cp => cp.id === lp.id || (cp.barcode && cp.barcode === lp.barcode));
+            if (idx === -1) {
+              mergedProducts.push(lp);
+            }
+          });
+          localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(mergedProducts));
+        }
+
+        if (cloudData.sales && Array.isArray(cloudData.sales)) {
+          // Merge sales
+          const localSales = localData.sales || [];
+          const mergedSales = [...cloudData.sales];
+          localSales.forEach(ls => {
+            const idx = mergedSales.findIndex(cs => cs.invoiceNumber === ls.invoiceNumber);
+            if (idx === -1) {
+              mergedSales.push(ls);
+            }
+          });
+          localStorage.setItem(DB_KEYS.SALES, JSON.stringify(mergedSales));
+        }
+
+        if (cloudData.customers && Array.isArray(cloudData.customers)) {
+          localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(cloudData.customers));
+        }
+
+        if (cloudData.expenses && Array.isArray(cloudData.expenses)) {
+          localStorage.setItem(DB_KEYS.EXPENSES, JSON.stringify(cloudData.expenses));
+        }
+
+        if (cloudData.stockMovements && Array.isArray(cloudData.stockMovements)) {
+          localStorage.setItem(DB_KEYS.STOCK_MOVEMENTS, JSON.stringify(cloudData.stockMovements));
+        }
+
+        // Re-render all views
+        window.pos?.renderPosView();
+        window.products?.renderProductsTable();
+        window.stock?.renderStockView();
+        window.app?.renderBillsTable();
+        window.app?.renderDashboard();
+
+        const prodCount = window.db.getProducts().length;
+        const salesCount = window.db.getSales().length;
+
+        window.notifications?.notify({
+          title: 'Cloud Synced with Google Account',
+          body: `Loaded ${prodCount} products & ${salesCount} bills from your account.`,
+          type: 'sync',
+          sound: false
+        });
+
+        window.app?.showToast(`Synced ${prodCount} items from your Google Account!`, 'success');
+      } else {
+        // If no cloud data yet, push local device data to cloud for the first time
+        await this.pushAllStoreData();
+      }
+    } catch (e) {
+      console.warn('Error pulling cloud data:', e);
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  /**
+   * Realtime channel listener for cross-device live updates
+   */
+  setupRealtimeListener(userId) {
     if (!this.client) return;
 
     try {
-      // 1. Pull Products
-      const { data: cloudProducts, error: prodErr } = await this.client.from('products').select('*');
-      if (!prodErr && cloudProducts && cloudProducts.length > 0) {
-        const localProds = window.db.getProducts();
-        cloudProducts.forEach(cp => {
-          const mapped = {
-            id: cp.id || 'prod-' + cp.barcode,
-            barcode: cp.barcode,
-            sku: cp.sku,
-            name: cp.name,
-            shortName: cp.short_name || cp.name,
-            categoryId: cp.category_id || 'cat-1',
-            brand: cp.brand || '',
-            unit: cp.unit || 'Pcs',
-            purchasePrice: parseFloat(cp.purchase_price) || 0,
-            sellingPrice: parseFloat(cp.selling_price) || 0,
-            mrp: parseFloat(cp.mrp) || 0,
-            taxPercent: parseFloat(cp.tax_percent) || 0,
-            currentStock: parseFloat(cp.current_stock) || 0,
-            minStock: parseFloat(cp.min_stock) || 5,
-            photoUrl: cp.photo_url || ''
-          };
-
-          const existIdx = localProds.findIndex(p => (p.barcode && p.barcode === mapped.barcode) || p.id === mapped.id);
-          if (existIdx !== -1) {
-            localProds[existIdx] = { ...localProds[existIdx], ...mapped };
-          } else {
-            localProds.push(mapped);
-          }
-        });
-
-        localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(localProds));
+      if (this.realtimeChannel) {
+        this.client.removeChannel(this.realtimeChannel);
       }
 
-      // 2. Pull Sales History
-      const { data: cloudSales, error: salesErr } = await this.client.from('sales').select('*').order('created_at', { ascending: false }).limit(100);
-      if (!salesErr && cloudSales && cloudSales.length > 0) {
-        const localSales = window.db.getSales();
-        cloudSales.forEach(cs => {
-          const existIdx = localSales.findIndex(s => s.invoiceNumber === cs.invoice_number);
-          if (existIdx === -1) {
-            localSales.push({
-              id: cs.id || 'sale-' + cs.invoice_number,
-              invoiceNumber: cs.invoice_number,
-              customerName: cs.customer_name || 'Walk-in Customer',
-              customerPhone: cs.customer_phone || '',
-              subtotal: parseFloat(cs.subtotal) || 0,
-              discountAmount: parseFloat(cs.discount_amount) || 0,
-              taxAmount: parseFloat(cs.tax_amount) || 0,
-              grandTotal: parseFloat(cs.grand_total) || 0,
-              purchaseCostTotal: parseFloat(cs.purchase_cost_total) || 0,
-              grossProfit: parseFloat(cs.gross_profit) || 0,
-              paymentMethod: cs.payment_method || 'CASH',
-              paymentStatus: cs.payment_status || 'PAID',
-              cashReceived: parseFloat(cs.cash_received) || 0,
-              changeReturned: parseFloat(cs.change_returned) || 0,
-              upiTransactionId: cs.upi_transaction_id || '',
-              timestamp: cs.created_at || new Date().toISOString()
-            });
+      this.realtimeChannel = this.client
+        .channel(`user_stores_${userId}`)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'user_stores',
+          filter: `user_id=eq.${userId}`
+        }, (payload) => {
+          if (payload.new && payload.new.store_data) {
+            // Background reload if updated by another device
+            this.pullCloudData();
           }
-        });
-        localStorage.setItem(DB_KEYS.SALES, JSON.stringify(localSales));
-      }
-
-      // 3. Pull Customers
-      const { data: cloudCusts, error: custErr } = await this.client.from('customers').select('*');
-      if (!custErr && cloudCusts && cloudCusts.length > 0) {
-        const localCusts = window.db.getCustomers();
-        cloudCusts.forEach(cc => {
-          const existIdx = localCusts.findIndex(c => c.phone === cc.phone || c.id === cc.id);
-          if (existIdx === -1) {
-            localCusts.push({
-              id: cc.id || 'cust-' + Date.now(),
-              name: cc.name,
-              phone: cc.phone || '',
-              email: cc.email || '',
-              address: cc.address || '',
-              totalSpent: parseFloat(cc.total_spent) || 0,
-              totalOrders: parseInt(cc.total_orders) || 0
-            });
-          }
-        });
-        localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(localCusts));
-      }
-
-      // Refresh DOM views
-      window.pos?.renderPosView();
-      window.products?.renderProductsTable();
-      window.stock?.renderStockView();
-      window.app?.renderBillsTable();
-      window.app?.renderDashboard();
-
-      window.notifications?.notify({
-        title: 'Cloud Data Synced',
-        body: `Products, sales, and customers synchronized across your devices.`,
-        type: 'sync',
-        sound: false
-      });
-
-      window.app?.showToast('Cloud data synced successfully!', 'success');
+        })
+        .subscribe();
     } catch (e) {
-      console.warn('Cloud sync error:', e);
+      console.warn('Realtime listener note:', e);
     }
   }
 
@@ -341,6 +318,20 @@ class SupabaseSyncManager {
     // Sign out buttons
     document.querySelectorAll('.auth-signout-btn').forEach(btn => {
       btn.addEventListener('click', () => this.signOut());
+    });
+
+    // Cloud Sync Now buttons
+    document.querySelectorAll('.cloud-sync-now-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!this.currentUser) {
+          window.app?.showToast('Please sign in with Google to sync across devices', 'warning');
+          this.signInWithGoogle();
+        } else {
+          window.app?.showToast('Syncing with Google account...', 'info');
+          await this.pullCloudData();
+          await this.pushAllStoreData();
+        }
+      });
     });
   }
 }

@@ -1,9 +1,27 @@
 -- ==========================================================
--- SHOP POS & INVENTORY MANAGEMENT SYSTEM - SUPABASE SCHEMA
+-- SHOPFLOW POS & INVENTORY MANAGEMENT SYSTEM - SUPABASE SCHEMA
 -- ==========================================================
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 0. UNIVERSAL CROSS-DEVICE SYNC TABLE (Primary Sync Engine)
+CREATE TABLE IF NOT EXISTS user_stores (
+    user_id TEXT PRIMARY KEY,
+    user_email TEXT,
+    store_data JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS on user_stores
+ALTER TABLE user_stores ENABLE ROW LEVEL SECURITY;
+
+-- Allow all operations for authenticated users and anon clients
+CREATE POLICY IF NOT EXISTS "Allow read/write on user_stores" 
+ON user_stores 
+FOR ALL 
+USING (true) 
+WITH CHECK (true);
 
 -- 1. SHOPS TABLE (Multi-tenant support)
 CREATE TABLE IF NOT EXISTS shops (
@@ -74,7 +92,7 @@ CREATE TABLE IF NOT EXISTS products (
     current_stock NUMERIC(12, 2) DEFAULT 0.00,
     min_stock NUMERIC(12, 2) DEFAULT 5.00,
     max_stock NUMERIC(12, 2) DEFAULT 1000.00,
-    unit VARCHAR(50) DEFAULT 'Pcs', -- 'Pcs', 'Kg', 'Gram', 'Litre', 'Pack', 'Box', 'Bottle'
+    unit VARCHAR(50) DEFAULT 'Pcs',
     supplier_name VARCHAR(255),
     batch_number VARCHAR(100),
     expiry_date DATE,
@@ -88,13 +106,12 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     shop_id UUID REFERENCES shops(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-    type VARCHAR(50) NOT NULL, -- 'OPENING', 'PURCHASE', 'SALE', 'DAMAGED', 'ADJUSTMENT'
-    quantity NUMERIC(12, 2) NOT NULL, -- Positive or negative
+    movement_type VARCHAR(50) NOT NULL, -- 'OPENING', 'PURCHASE', 'SALE', 'DAMAGED', 'ADJUSTMENT'
+    quantity_changed NUMERIC(12, 2) NOT NULL,
     previous_stock NUMERIC(12, 2) NOT NULL,
     new_stock NUMERIC(12, 2) NOT NULL,
-    reference_id UUID, -- sale_id or purchase_id
-    notes TEXT,
-    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    reference_invoice VARCHAR(100),
+    reason TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -103,10 +120,9 @@ CREATE TABLE IF NOT EXISTS customers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     shop_id UUID REFERENCES shops(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    phone VARCHAR(50),
+    phone VARCHAR(50) UNIQUE,
     email VARCHAR(255),
     address TEXT,
-    notes TEXT,
     total_spent NUMERIC(12, 2) DEFAULT 0.00,
     total_orders INT DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -117,23 +133,22 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS sales (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     shop_id UUID REFERENCES shops(id) ON DELETE CASCADE,
-    invoice_number VARCHAR(100) NOT NULL,
     customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
     customer_name VARCHAR(255) DEFAULT 'Walk-in Customer',
     customer_phone VARCHAR(50),
+    invoice_number VARCHAR(100) UNIQUE NOT NULL,
     subtotal NUMERIC(12, 2) NOT NULL,
     discount_amount NUMERIC(12, 2) DEFAULT 0.00,
     tax_amount NUMERIC(12, 2) DEFAULT 0.00,
     grand_total NUMERIC(12, 2) NOT NULL,
     purchase_cost_total NUMERIC(12, 2) DEFAULT 0.00,
     gross_profit NUMERIC(12, 2) DEFAULT 0.00,
-    payment_method VARCHAR(50) NOT NULL, -- 'CASH', 'UPI', 'CARD', 'SPLIT', 'OTHER'
-    payment_status VARCHAR(50) DEFAULT 'PAID', -- 'PAID', 'PENDING', 'PARTIAL'
+    payment_method VARCHAR(50) NOT NULL, -- 'CASH', 'UPI', 'CARD', 'SPLIT'
+    payment_status VARCHAR(50) DEFAULT 'PAID',
     cash_received NUMERIC(12, 2) DEFAULT 0.00,
     change_returned NUMERIC(12, 2) DEFAULT 0.00,
     upi_transaction_id VARCHAR(100),
     notes TEXT,
-    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -144,15 +159,14 @@ CREATE TABLE IF NOT EXISTS sale_items (
     product_id UUID REFERENCES products(id) ON DELETE SET NULL,
     product_name VARCHAR(255) NOT NULL,
     barcode VARCHAR(100),
-    unit VARCHAR(50),
+    unit VARCHAR(50) DEFAULT 'Pcs',
     quantity NUMERIC(12, 2) NOT NULL,
-    purchase_price NUMERIC(12, 2) DEFAULT 0.00,
     unit_price NUMERIC(12, 2) NOT NULL,
-    mrp NUMERIC(12, 2) NOT NULL,
-    discount_amount NUMERIC(12, 2) DEFAULT 0.00,
+    purchase_price NUMERIC(12, 2) DEFAULT 0.00,
     tax_percent NUMERIC(5, 2) DEFAULT 0.00,
     tax_amount NUMERIC(12, 2) DEFAULT 0.00,
-    total NUMERIC(12, 2) NOT NULL,
+    discount_amount NUMERIC(12, 2) DEFAULT 0.00,
+    total_price NUMERIC(12, 2) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -160,79 +174,10 @@ CREATE TABLE IF NOT EXISTS sale_items (
 CREATE TABLE IF NOT EXISTS expenses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     shop_id UUID REFERENCES shops(id) ON DELETE CASCADE,
-    category VARCHAR(100) NOT NULL, -- 'Rent', 'Electricity', 'Packaging', 'Wages', 'Maintenance', 'Transport', 'Other'
+    category VARCHAR(100) NOT NULL,
     amount NUMERIC(12, 2) NOT NULL,
-    date DATE DEFAULT CURRENT_DATE,
+    date DATE NOT NULL,
     description TEXT,
     payment_method VARCHAR(50) DEFAULT 'CASH',
-    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-
--- ==========================================================
--- INDEXES FOR MAXIMUM QUERY PERFORMANCE
--- ==========================================================
-CREATE INDEX IF NOT EXISTS idx_products_shop_id ON products(shop_id);
-CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
-CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
-CREATE INDEX IF NOT EXISTS idx_sales_shop_id ON sales(shop_id);
-CREATE INDEX IF NOT EXISTS idx_sales_invoice ON sales(invoice_number);
-CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
-CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
-CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id);
-CREATE INDEX IF NOT EXISTS idx_expenses_shop_date ON expenses(shop_id, date);
-
--- ==========================================================
--- ROW LEVEL SECURITY (RLS) POLICIES
--- ==========================================================
-ALTER TABLE shops ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sale_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
-
--- Helper function to get the current user's shop_id
-CREATE OR REPLACE FUNCTION get_user_shop_id()
-RETURNS UUID AS $$
-  SELECT shop_id FROM profiles WHERE id = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER;
-
--- Shops RLS
-CREATE POLICY "Users can view own shop" ON shops
-    FOR ALL USING (id = get_user_shop_id() OR owner_id = auth.uid());
-
--- Profiles RLS
-CREATE POLICY "Users can view shop profiles" ON profiles
-    FOR ALL USING (shop_id = get_user_shop_id() OR id = auth.uid());
-
--- Categories RLS
-CREATE POLICY "Users can manage categories in their shop" ON categories
-    FOR ALL USING (shop_id = get_user_shop_id());
-
--- Products RLS
-CREATE POLICY "Users can manage products in their shop" ON products
-    FOR ALL USING (shop_id = get_user_shop_id());
-
--- Stock Movements RLS
-CREATE POLICY "Users can view and add stock movements" ON stock_movements
-    FOR ALL USING (shop_id = get_user_shop_id());
-
--- Customers RLS
-CREATE POLICY "Users can manage customers in their shop" ON customers
-    FOR ALL USING (shop_id = get_user_shop_id());
-
--- Sales RLS
-CREATE POLICY "Users can manage sales in their shop" ON sales
-    FOR ALL USING (shop_id = get_user_shop_id());
-
--- Sale Items RLS
-CREATE POLICY "Users can manage sale items" ON sale_items
-    FOR ALL USING (sale_id IN (SELECT id FROM sales WHERE shop_id = get_user_shop_id()));
-
--- Expenses RLS
-CREATE POLICY "Users can manage expenses in their shop" ON expenses
-    FOR ALL USING (shop_id = get_user_shop_id());
