@@ -613,6 +613,14 @@ class POSController {
 
     window.app?.showToast(`Bill #${savedSale.invoiceNumber} completed successfully!`, 'success');
 
+    // Trigger Notification & Cash Chime
+    window.notifications?.notify({
+      title: `Bill #${savedSale.invoiceNumber} Completed`,
+      body: `₹${savedSale.grandTotal.toFixed(2)} received via ${savedSale.paymentMethod} (${savedSale.customerName})`,
+      type: 'sale',
+      sound: true
+    });
+
     // Open Instant Receipt Print Preview
     window.invoices.openPrintModal(savedSale);
 

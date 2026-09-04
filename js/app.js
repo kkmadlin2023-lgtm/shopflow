@@ -19,6 +19,8 @@ class AppRouter {
     this.bindGlobalShortcuts();
 
     // Initialize sub-controllers
+    if (window.i18n) window.i18n.init();
+    if (window.notifications) window.notifications.init();
     if (window.pos) window.pos.init();
     if (window.products) window.products.init();
     if (window.stock) window.stock.init();

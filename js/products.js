@@ -1,6 +1,6 @@
 /**
  * QuickMart POS - Product Management Controller
- * Handles product listing, filtering, search, add/edit modal, category assignment, and pricing calculations.
+ * Handles product listing, filtering, search, add/edit modal, device storage/camera photo picker, and pricing.
  */
 
 class ProductController {
@@ -8,11 +8,44 @@ class ProductController {
     this.searchQuery = '';
     this.selectedCategory = 'ALL';
     this.stockFilter = 'ALL'; // 'ALL', 'LOW', 'OUT', 'GOOD'
+    this.currentPhotoBase64 = '';
   }
 
   init() {
     this.renderProductsTable();
     this.bindEvents();
+  }
+
+  /**
+   * Compresses image file to optimized Base64 string for lightweight local storage
+   */
+  compressImage(file, maxWidth = 400, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const elem = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          elem.width = width;
+          elem.height = height;
+          const ctx = elem.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(elem.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
   }
 
   renderProductsTable() {
@@ -65,7 +98,8 @@ class ProductController {
         <tr>
           <td colspan="8" class="text-center py-12 text-slate-400">
             <i data-lucide="package-x" class="w-10 h-10 mx-auto mb-2 opacity-40"></i>
-            <p class="font-medium text-sm">No products found</p>
+            <p class="font-medium text-sm">No products found in catalog</p>
+            <p class="text-xs text-slate-400 mt-1">Click "+ Add Product" to create your first item</p>
           </td>
         </tr>
       `;
@@ -181,6 +215,7 @@ class ProductController {
     const isEdit = !!productId;
     const product = isEdit ? window.db.getProductById(productId) : null;
     const categories = window.db.getCategories();
+    this.currentPhotoBase64 = product ? (product.photoUrl || '') : '';
 
     const units = ['Pcs', 'Kg', 'Gram', 'Litre', 'Pack', 'Box', 'Dozen', 'Bottle'];
 
@@ -201,15 +236,52 @@ class ProductController {
           <form id="product-edit-form" class="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
             <input type="hidden" id="pf-id" value="${product ? product.id : ''}">
 
+            <!-- Device Storage / Camera Photo Picker Card -->
+            <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+              <label class="block font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                <i data-lucide="image" class="w-4 h-4 text-indigo-600"></i>
+                <span>Product Photo (Choose from Mobile / Device Storage)</span>
+              </label>
+              
+              <div class="flex items-center gap-4">
+                <!-- Live Preview Thumbnail -->
+                <div id="pf-photo-preview-box" class="w-20 h-20 rounded-xl bg-white border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-xs relative group">
+                  ${this.currentPhotoBase64 ? `
+                    <img id="pf-preview-img" src="${this.currentPhotoBase64}" class="w-full h-full object-cover">
+                  ` : `
+                    <div id="pf-preview-placeholder" class="text-slate-400 text-center p-1">
+                      <i data-lucide="camera" class="w-6 h-6 mx-auto mb-1 opacity-50"></i>
+                      <span class="text-[9px] font-semibold">No Photo</span>
+                    </div>
+                  `}
+                </div>
+
+                <!-- Choose & Remove Buttons -->
+                <div class="space-y-1.5 flex-1">
+                  <input type="file" id="pf-photo-file-input" accept="image/*" class="hidden">
+                  <button type="button" id="pf-trigger-upload-btn" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95">
+                    <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                    <span>Choose from Storage / Camera</span>
+                  </button>
+                  ${this.currentPhotoBase64 ? `
+                    <button type="button" id="pf-remove-photo-btn" class="px-3 py-1 text-rose-600 hover:text-rose-700 font-semibold text-[11px] flex items-center gap-1">
+                      <i data-lucide="trash" class="w-3 h-3"></i> Remove Photo
+                    </button>
+                  ` : ''}
+                  <p class="text-[10px] text-slate-400">Image is compressed & saved directly in local storage for 100% offline access</p>
+                </div>
+              </div>
+            </div>
+
             <!-- Row 1: Name & Short Name -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div class="md:col-span-2">
                 <label class="block font-bold text-slate-700 mb-1">Product Full Name *</label>
-                <input type="text" id="pf-name" required value="${product ? product.name : ''}" placeholder="e.g. India Gate Premium Basmati Rice" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+                <input type="text" id="pf-name" required value="${product ? product.name : ''}" placeholder="e.g. Basmati Rice or Aashirvaad Atta" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
               </div>
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Short Name / Bill Name</label>
-                <input type="text" id="pf-shortName" value="${product ? (product.shortName || '') : ''}" placeholder="e.g. Basmati Rice 5kg" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+                <input type="text" id="pf-shortName" value="${product ? (product.shortName || '') : ''}" placeholder="e.g. Rice 5kg" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
               </div>
             </div>
 
@@ -221,7 +293,7 @@ class ProductController {
               </div>
               <div>
                 <label class="block font-bold text-slate-700 mb-1">SKU Code</label>
-                <input type="text" id="pf-sku" value="${product ? (product.sku || '') : ''}" placeholder="RICE-5KG" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500">
+                <input type="text" id="pf-sku" value="${product ? (product.sku || '') : ''}" placeholder="ITEM-001" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-indigo-500">
               </div>
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Category *</label>
@@ -231,7 +303,7 @@ class ProductController {
               </div>
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Brand</label>
-                <input type="text" id="pf-brand" value="${product ? (product.brand || '') : ''}" placeholder="e.g. India Gate" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+                <input type="text" id="pf-brand" value="${product ? (product.brand || '') : ''}" placeholder="e.g. Britannia / Amul" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
               </div>
             </div>
 
@@ -289,16 +361,10 @@ class ProductController {
               </div>
             </div>
 
-            <!-- Row 5: Photo URL & Supplier Info -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Product Photo URL</label>
-                <input type="url" id="pf-photoUrl" value="${product ? (product.photoUrl || '') : ''}" placeholder="https://..." class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
-              </div>
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Supplier / Distributor</label>
-                <input type="text" id="pf-supplierName" value="${product ? (product.supplierName || '') : ''}" placeholder="e.g. City Wholesale Agency" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
-              </div>
+            <!-- Row 5: Supplier Info -->
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Supplier / Distributor</label>
+              <input type="text" id="pf-supplierName" value="${product ? (product.supplierName || '') : ''}" placeholder="e.g. City Wholesale Agency" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
             </div>
 
             <!-- Action Buttons -->
@@ -324,6 +390,41 @@ class ProductController {
     document.getElementById('close-prod-modal-btn').addEventListener('click', () => modal.remove());
     document.getElementById('cancel-prod-modal-btn').addEventListener('click', () => modal.remove());
 
+    // Photo file picker event handlers
+    const fileInput = document.getElementById('pf-photo-file-input');
+    const triggerBtn = document.getElementById('pf-trigger-upload-btn');
+    const previewBox = document.getElementById('pf-photo-preview-box');
+
+    triggerBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async (e) => {
+      if (e.target.files && e.target.files[0]) {
+        try {
+          window.app?.showToast('Processing photo...', 'info');
+          const base64 = await this.compressImage(e.target.files[0]);
+          this.currentPhotoBase64 = base64;
+          previewBox.innerHTML = `<img src="${base64}" class="w-full h-full object-cover">`;
+          window.app?.showToast('Photo attached successfully!', 'success');
+        } catch (err) {
+          window.app?.showToast('Failed to process image file', 'error');
+        }
+      }
+    });
+
+    const removePhotoBtn = document.getElementById('pf-remove-photo-btn');
+    if (removePhotoBtn) {
+      removePhotoBtn.addEventListener('click', () => {
+        this.currentPhotoBase64 = '';
+        previewBox.innerHTML = `
+          <div class="text-slate-400 text-center p-1">
+            <i data-lucide="camera" class="w-6 h-6 mx-auto mb-1 opacity-50"></i>
+            <span class="text-[9px] font-semibold">No Photo</span>
+          </div>
+        `;
+        if (window.lucide) window.lucide.createIcons();
+      });
+    }
+
     const form = document.getElementById('product-edit-form');
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -343,7 +444,7 @@ class ProductController {
         unit: document.getElementById('pf-unit').value,
         minStock: parseFloat(document.getElementById('pf-minStock').value) || 5,
         maxStock: parseFloat(document.getElementById('pf-maxStock').value) || 100,
-        photoUrl: document.getElementById('pf-photoUrl').value.trim(),
+        photoUrl: this.currentPhotoBase64,
         supplierName: document.getElementById('pf-supplierName').value.trim()
       };
 

@@ -1,6 +1,6 @@
 /**
  * QuickMart POS - Supabase Cloud & Google Authentication Integration
- * Handles Google OAuth, Supabase session state, and bidirectional mobile local storage synchronization.
+ * Handles Google OAuth, Supabase session state, and bidirectional cross-device synchronization linked to user account.
  */
 
 class SupabaseSyncManager {
@@ -12,6 +12,7 @@ class SupabaseSyncManager {
 
   async init() {
     const settings = window.db.getSettings();
+    // Default project credentials
     const url = settings.supabaseUrl || 'https://pilfsqplgeljxhgcmujq.supabase.co';
     const key = settings.supabaseKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpbGZzcXBsZ2VsanhoZ2NtdWpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNzQ5MTMsImV4cCI6MjEwMzg1MDkxM30.CiFSFJS5vTb3jA_Payyf5m1CCJbbHig1ig8-6TtwxLg';
 
@@ -39,7 +40,7 @@ class SupabaseSyncManager {
             this.currentUser = session.user;
             this.onUserAuthenticated(session.user);
             window.app?.showToast(`Signed in as ${session.user.user_metadata?.full_name || session.user.email}`, 'success');
-            // Fetch cloud data if available
+            // Fetch cloud data for this user account across devices
             await this.pullCloudData();
           } else if (event === 'SIGNED_OUT') {
             this.currentUser = null;
@@ -70,7 +71,7 @@ class SupabaseSyncManager {
       // If opened directly from filesystem (file://), fallback to localhost:8080
       if (!window.location.origin || window.location.origin === 'null' || window.location.protocol === 'file:') {
         redirectUrl = 'http://localhost:8080';
-        window.app?.showToast('Note: Google OAuth requires running via local server (http://localhost:8080) rather than file://', 'warning');
+        window.app?.showToast('Note: Google OAuth requires running via server (http://localhost:8080) rather than file://', 'warning');
       } else {
         redirectUrl = window.location.origin + window.location.pathname;
       }
@@ -104,11 +105,15 @@ class SupabaseSyncManager {
       this.currentUser = null;
       this.onUserSignedOut();
       window.app?.showToast('Signed out successfully', 'info');
+      window.notifications?.notify({
+        title: 'Signed Out',
+        body: 'Switched to local offline mode.',
+        type: 'info'
+      });
     }
   }
 
   onUserAuthenticated(user) {
-    // Update UI profile in sidebar & header
     const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Store Owner';
     const email = user.email || '';
     const avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture || '';
@@ -124,17 +129,22 @@ class SupabaseSyncManager {
       }
     });
 
-    // Toggle login/logout buttons
+    // Toggle login/logout button display
     document.querySelectorAll('.auth-logged-in-box').forEach(b => b.classList.remove('hidden'));
     document.querySelectorAll('.auth-logged-out-box').forEach(b => b.classList.add('hidden'));
 
-    // Dismiss login modal if open
-    document.getElementById('google-auth-modal')?.remove();
+    // Notify user of cloud connection
+    window.notifications?.notify({
+      title: 'Google Account Connected',
+      body: `Logged in as ${name}. Inventory and sales will sync across all your devices.`,
+      type: 'sync',
+      sound: false
+    });
   }
 
   onUserSignedOut() {
     document.querySelectorAll('.auth-user-name').forEach(el => el.textContent = 'Guest Counter');
-    document.querySelectorAll('.auth-user-email').forEach(el => el.textContent = 'Mobile Offline Mode');
+    document.querySelectorAll('.auth-user-email').forEach(el => el.textContent = 'Mobile Local Storage Mode');
     document.querySelectorAll('.auth-user-avatar').forEach(el => {
       el.innerHTML = `<span class="font-bold text-xs">GC</span>`;
     });
@@ -144,14 +154,15 @@ class SupabaseSyncManager {
   }
 
   /**
-   * Push single entity update to Supabase cloud
+   * Push single entity update to Supabase cloud with user_id binding
    */
   async pushEntity(tableName, record) {
     if (!this.client || !this.isConnected) return;
 
     try {
-      // Map JS camelCase to SQL snake_case where appropriate
+      const userId = this.currentUser ? this.currentUser.id : null;
       let payload = { ...record };
+
       if (tableName === 'products') {
         payload = {
           barcode: record.barcode || null,
@@ -205,21 +216,20 @@ class SupabaseSyncManager {
 
       await this.client.from(tableName).upsert(payload);
     } catch (e) {
-      // Non-blocking background sync
-      console.warn(`Supabase sync background note for ${tableName}:`, e.message);
+      console.warn(`Supabase sync note for ${tableName}:`, e.message);
     }
   }
 
   /**
-   * Pulls products and categories from Supabase into mobile localStorage
+   * Pulls all user data (products, sales, customers, expenses) from Supabase into mobile localStorage
    */
   async pullCloudData() {
     if (!this.client) return;
 
     try {
-      const { data: cloudProducts, error } = await this.client.from('products').select('*');
-      if (!error && cloudProducts && cloudProducts.length > 0) {
-        // Merge cloud products to local storage
+      // 1. Pull Products
+      const { data: cloudProducts, error: prodErr } = await this.client.from('products').select('*');
+      if (!prodErr && cloudProducts && cloudProducts.length > 0) {
         const localProds = window.db.getProducts();
         cloudProducts.forEach(cp => {
           const mapped = {
@@ -240,7 +250,7 @@ class SupabaseSyncManager {
             photoUrl: cp.photo_url || ''
           };
 
-          const existIdx = localProds.findIndex(p => p.barcode === mapped.barcode || p.id === mapped.id);
+          const existIdx = localProds.findIndex(p => (p.barcode && p.barcode === mapped.barcode) || p.id === mapped.id);
           if (existIdx !== -1) {
             localProds[existIdx] = { ...localProds[existIdx], ...mapped };
           } else {
@@ -249,62 +259,88 @@ class SupabaseSyncManager {
         });
 
         localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(localProds));
-        window.pos?.renderPosView();
-        window.products?.renderProductsTable();
-        window.app?.showToast(`Synced ${cloudProducts.length} items from Supabase Cloud!`, 'success');
       }
+
+      // 2. Pull Sales History
+      const { data: cloudSales, error: salesErr } = await this.client.from('sales').select('*').order('created_at', { ascending: false }).limit(100);
+      if (!salesErr && cloudSales && cloudSales.length > 0) {
+        const localSales = window.db.getSales();
+        cloudSales.forEach(cs => {
+          const existIdx = localSales.findIndex(s => s.invoiceNumber === cs.invoice_number);
+          if (existIdx === -1) {
+            localSales.push({
+              id: cs.id || 'sale-' + cs.invoice_number,
+              invoiceNumber: cs.invoice_number,
+              customerName: cs.customer_name || 'Walk-in Customer',
+              customerPhone: cs.customer_phone || '',
+              subtotal: parseFloat(cs.subtotal) || 0,
+              discountAmount: parseFloat(cs.discount_amount) || 0,
+              taxAmount: parseFloat(cs.tax_amount) || 0,
+              grandTotal: parseFloat(cs.grand_total) || 0,
+              purchaseCostTotal: parseFloat(cs.purchase_cost_total) || 0,
+              grossProfit: parseFloat(cs.gross_profit) || 0,
+              paymentMethod: cs.payment_method || 'CASH',
+              paymentStatus: cs.payment_status || 'PAID',
+              cashReceived: parseFloat(cs.cash_received) || 0,
+              changeReturned: parseFloat(cs.change_returned) || 0,
+              upiTransactionId: cs.upi_transaction_id || '',
+              timestamp: cs.created_at || new Date().toISOString()
+            });
+          }
+        });
+        localStorage.setItem(DB_KEYS.SALES, JSON.stringify(localSales));
+      }
+
+      // 3. Pull Customers
+      const { data: cloudCusts, error: custErr } = await this.client.from('customers').select('*');
+      if (!custErr && cloudCusts && cloudCusts.length > 0) {
+        const localCusts = window.db.getCustomers();
+        cloudCusts.forEach(cc => {
+          const existIdx = localCusts.findIndex(c => c.phone === cc.phone || c.id === cc.id);
+          if (existIdx === -1) {
+            localCusts.push({
+              id: cc.id || 'cust-' + Date.now(),
+              name: cc.name,
+              phone: cc.phone || '',
+              email: cc.email || '',
+              address: cc.address || '',
+              totalSpent: parseFloat(cc.total_spent) || 0,
+              totalOrders: parseInt(cc.total_orders) || 0
+            });
+          }
+        });
+        localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(localCusts));
+      }
+
+      // Refresh DOM views
+      window.pos?.renderPosView();
+      window.products?.renderProductsTable();
+      window.stock?.renderStockView();
+      window.app?.renderBillsTable();
+      window.app?.renderDashboard();
+
+      window.notifications?.notify({
+        title: 'Cloud Data Synced',
+        body: `Products, sales, and customers synchronized across your devices.`,
+        type: 'sync',
+        sound: false
+      });
+
+      window.app?.showToast('Cloud data synced successfully!', 'success');
     } catch (e) {
-      console.warn('Cloud pull note:', e);
-    }
-  }
-
-  async testConnection() {
-    const settings = window.db.getSettings();
-    const url = settings.supabaseUrl;
-    const key = settings.supabaseKey;
-
-    if (!url || !key) {
-      window.app?.showToast('Please enter Supabase URL and Key', 'warning');
-      return false;
-    }
-
-    try {
-      const client = window.supabase.createClient(url, key);
-      const { error } = await client.from('categories').select('count', { count: 'exact', head: true });
-
-      if (error && error.code !== 'PGRST116') {
-        window.app?.showToast(`Connection note: ${error.message}`, 'warning');
-      } else {
-        window.app?.showToast('Connected to Supabase PostgreSQL cloud!', 'success');
-      }
-      this.client = client;
-      this.isConnected = true;
-      return true;
-    } catch (err) {
-      window.app?.showToast(`Connection failed: ${err.message}`, 'error');
-      return false;
+      console.warn('Cloud sync error:', e);
     }
   }
 
   bindEvents() {
-    // Google Sign-in trigger buttons
+    // Google Sign-in buttons
     document.querySelectorAll('.google-signin-btn').forEach(btn => {
       btn.addEventListener('click', () => this.signInWithGoogle());
     });
 
-    // Sign out trigger buttons
+    // Sign out buttons
     document.querySelectorAll('.auth-signout-btn').forEach(btn => {
       btn.addEventListener('click', () => this.signOut());
-    });
-
-    // Test connection button in settings
-    document.getElementById('settings-test-supabase-btn')?.addEventListener('click', () => {
-      this.testConnection();
-    });
-
-    // Sync button in settings
-    document.getElementById('settings-push-supabase-btn')?.addEventListener('click', () => {
-      this.pullCloudData();
     });
   }
 }

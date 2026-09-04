@@ -1,6 +1,7 @@
 /**
  * QuickMart POS - Settings & Store Configuration Controller
- * Handles shop metadata, UPI credentials, thermal printer preferences, data backup, and Supabase keys.
+ * Handles shop metadata, UPI credentials, thermal printer preferences, language, and data backups.
+ * Note: Database connection keys are securely managed in the background and omitted from user-facing inputs.
  */
 
 class SettingsController {
@@ -14,7 +15,6 @@ class SettingsController {
   populateForm() {
     const s = window.db.getSettings();
 
-    // Shop Info
     const setVal = (id, val) => {
       const el = document.getElementById(id);
       if (el) el.value = val !== undefined ? val : '';
@@ -25,6 +25,7 @@ class SettingsController {
       if (el) el.checked = !!val;
     };
 
+    // Store Metadata
     setVal('set-shop-name', s.shopName);
     setVal('set-tagline', s.tagline);
     setVal('set-phone', s.phone);
@@ -50,10 +51,6 @@ class SettingsController {
     setChecked('set-show-gst', s.showGstOnBill);
     setChecked('set-show-qr', s.showQrOnBill);
     setChecked('set-show-address', s.showAddressOnBill);
-
-    // Supabase
-    setVal('set-supabase-url', s.supabaseUrl || 'https://pilfsqplgeljxhgcmujq.supabase.co');
-    setVal('set-supabase-key', s.supabaseKey || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpbGZzcXBsZ2VsanhoZ2NtdWpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNzQ5MTMsImV4cCI6MjEwMzg1MDkxM30.CiFSFJS5vTb3jA_Payyf5m1CCJbbHig1ig8-6TtwxLg');
   }
 
   saveForm(e) {
@@ -61,6 +58,8 @@ class SettingsController {
 
     const getVal = (id) => document.getElementById(id)?.value?.trim() || '';
     const getChecked = (id) => !!document.getElementById(id)?.checked;
+
+    const currentSettings = window.db.getSettings();
 
     const payload = {
       shopName: getVal('set-shop-name') || 'My Shop Counter',
@@ -83,8 +82,9 @@ class SettingsController {
       showGstOnBill: getChecked('set-show-gst'),
       showQrOnBill: getChecked('set-show-qr'),
       showAddressOnBill: getChecked('set-show-address'),
-      supabaseUrl: getVal('set-supabase-url'),
-      supabaseKey: getVal('set-supabase-key')
+      // Keep existing Supabase credentials securely
+      supabaseUrl: currentSettings.supabaseUrl,
+      supabaseKey: currentSettings.supabaseKey
     };
 
     window.db.saveSettings(payload);
