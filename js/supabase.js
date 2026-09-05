@@ -1,6 +1,6 @@
 /**
  * QuickMart POS - Supabase Cloud & Google Authentication Integration
- * Provides rock-solid, multi-device cloud synchronization bound to the user's Google Account.
+ * Multi-device cloud synchronization bound to the user's Google Email and Account.
  */
 
 class SupabaseSyncManager {
@@ -72,7 +72,7 @@ class SupabaseSyncManager {
       // If opened directly from filesystem (file://), fallback to localhost:8080
       if (!window.location.origin || window.location.origin === 'null' || window.location.protocol === 'file:') {
         redirectUrl = 'http://localhost:8080';
-        window.app?.showToast('Note: Google OAuth requires running via server (http://localhost:8080) rather than file://', 'warning');
+        window.app?.showToast('Note: Google OAuth requires running via web server (http://localhost:8080) rather than file://', 'warning');
       } else {
         redirectUrl = window.location.origin + window.location.pathname;
       }
@@ -116,7 +116,7 @@ class SupabaseSyncManager {
 
   onUserAuthenticated(user) {
     const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Store Owner';
-    const email = user.email || '';
+    const email = (user.email || '').toLowerCase().trim();
     const avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture || '';
 
     // Update Desktop & Mobile Sidebar User info
@@ -135,7 +135,10 @@ class SupabaseSyncManager {
     document.querySelectorAll('.auth-logged-out-box').forEach(b => b.classList.add('hidden'));
 
     // Enable realtime listener for multi-device sync
-    this.setupRealtimeListener(user.id);
+    this.setupRealtimeListener(email);
+
+    // Save FCM token to database under this email
+    this.registerFcmToken(email);
   }
 
   onUserSignedOut() {
@@ -154,27 +157,77 @@ class SupabaseSyncManager {
     }
   }
 
+  async registerFcmToken(email) {
+    if (!this.client || !email) return;
+    try {
+      const token = window.notifications?.fcmDeviceToken;
+      if (token) {
+        await this.client.from('fcm_tokens').upsert({
+          token: token,
+          user_email: email,
+          device_info: navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'token' });
+      }
+    } catch (e) {
+      // Non-blocking
+    }
+  }
+
   /**
-   * Pushes full store data (products, sales, customers, stock, settings) to Supabase cloud
+   * Pushes full store data (products, sales, customers, stock, settings) to Supabase cloud using Email
    */
   async pushAllStoreData() {
     if (!this.client || !this.currentUser) return;
 
     try {
       const storeSnapshot = window.db.exportAllData();
+      const userEmail = (this.currentUser.email || '').toLowerCase().trim();
       const userId = this.currentUser.id;
-      const userEmail = this.currentUser.email || '';
 
-      const { error } = await this.client.from('user_stores').upsert({
-        user_id: userId,
+      if (!userEmail) return;
+
+      // 1. Primary Sync: Universal snapshot table
+      const { error: storeErr } = await this.client.from('user_stores').upsert({
         user_email: userEmail,
+        user_id: userId,
         store_data: storeSnapshot,
+        fcm_token: window.notifications?.fcmDeviceToken || null,
+        last_synced_from: navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop',
         updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id' });
+      }, { onConflict: 'user_email' });
 
-      if (error) {
-        console.warn('Store sync note:', error.message);
+      if (storeErr) {
+        console.warn('user_stores sync notice:', storeErr.message);
       }
+
+      // 2. Relational Sync for individual products
+      if (storeSnapshot.products && Array.isArray(storeSnapshot.products)) {
+        const prodsPayload = storeSnapshot.products.map(p => ({
+          id: p.id,
+          user_email: userEmail,
+          barcode: p.barcode || null,
+          sku: p.sku || null,
+          name: p.name,
+          short_name: p.shortName || p.name,
+          category_id: p.categoryId || null,
+          brand: p.brand || null,
+          purchase_price: parseFloat(p.purchasePrice) || 0,
+          selling_price: parseFloat(p.sellingPrice) || 0,
+          mrp: parseFloat(p.mrp) || 0,
+          tax_percent: parseFloat(p.taxPercent) || 0,
+          current_stock: parseFloat(p.currentStock) || 0,
+          min_stock: parseFloat(p.minStock) || 5,
+          unit: p.unit || 'Pcs',
+          photo_url: p.photoUrl || null,
+          supplier_name: p.supplierName || null
+        }));
+
+        if (prodsPayload.length > 0) {
+          await this.client.from('products').upsert(prodsPayload, { onConflict: 'id' }).catch(() => {});
+        }
+      }
+
     } catch (err) {
       console.warn('Sync push error:', err);
     }
@@ -184,35 +237,35 @@ class SupabaseSyncManager {
    * Hook called whenever a single entity (product, sale, expense) is modified locally
    */
   async pushEntity(tableName, record) {
-    // Non-blocking full sync snapshot to user_stores
     this.pushAllStoreData();
   }
 
   /**
-   * Pulls all user data from Supabase cloud into the device's local storage
+   * Pulls all user data from Supabase cloud into the device's local storage based on Email
    */
   async pullCloudData() {
     if (!this.client || !this.currentUser || this.isSyncing) return;
     this.isSyncing = true;
 
     try {
+      const userEmail = (this.currentUser.email || '').toLowerCase().trim();
       const userId = this.currentUser.id;
-      const userEmail = this.currentUser.email;
 
-      // 1. Fetch from user_stores snapshot table
+      if (!userEmail) return;
+
+      // 1. Fetch from user_stores snapshot table by user_email
       const { data, error } = await this.client
         .from('user_stores')
         .select('*')
-        .or(`user_id.eq.${userId},user_email.eq.${userEmail}`)
+        .or(`user_email.eq.${userEmail},user_id.eq.${userId}`)
         .maybeSingle();
 
-      if (!error && data && data.store_data) {
+      if (!error && data && data.store_data && Object.keys(data.store_data).length > 0) {
         const cloudData = data.store_data;
         const localData = window.db.exportAllData();
 
-        // If cloud data exists, merge products and sales intelligently
+        // Merge products
         if (cloudData.products && Array.isArray(cloudData.products)) {
-          // Merge products
           const localProducts = localData.products || [];
           const mergedProducts = [...cloudData.products];
           
@@ -225,8 +278,8 @@ class SupabaseSyncManager {
           localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(mergedProducts));
         }
 
+        // Merge sales
         if (cloudData.sales && Array.isArray(cloudData.sales)) {
-          // Merge sales
           const localSales = localData.sales || [];
           const mergedSales = [...cloudData.sales];
           localSales.forEach(ls => {
@@ -262,12 +315,12 @@ class SupabaseSyncManager {
 
         window.notifications?.notify({
           title: 'Cloud Synced with Google Account',
-          body: `Loaded ${prodCount} products & ${salesCount} bills from your account.`,
+          body: `Loaded ${prodCount} products & ${salesCount} bills from ${userEmail}.`,
           type: 'sync',
           sound: false
         });
 
-        window.app?.showToast(`Synced ${prodCount} items from your Google Account!`, 'success');
+        window.app?.showToast(`Synced ${prodCount} products from ${userEmail}!`, 'success');
       } else {
         // If no cloud data yet, push local device data to cloud for the first time
         await this.pushAllStoreData();
@@ -280,10 +333,10 @@ class SupabaseSyncManager {
   }
 
   /**
-   * Realtime channel listener for cross-device live updates
+   * Realtime channel listener for cross-device live updates based on email
    */
-  setupRealtimeListener(userId) {
-    if (!this.client) return;
+  setupRealtimeListener(userEmail) {
+    if (!this.client || !userEmail) return;
 
     try {
       if (this.realtimeChannel) {
@@ -291,15 +344,14 @@ class SupabaseSyncManager {
       }
 
       this.realtimeChannel = this.client
-        .channel(`user_stores_${userId}`)
+        .channel(`user_stores_${userEmail}`)
         .on('postgres_changes', {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'user_stores',
-          filter: `user_id=eq.${userId}`
+          filter: `user_email=eq.${userEmail}`
         }, (payload) => {
           if (payload.new && payload.new.store_data) {
-            // Background reload if updated by another device
             this.pullCloudData();
           }
         })
@@ -327,7 +379,7 @@ class SupabaseSyncManager {
           window.app?.showToast('Please sign in with Google to sync across devices', 'warning');
           this.signInWithGoogle();
         } else {
-          window.app?.showToast('Syncing with Google account...', 'info');
+          window.app?.showToast(`Syncing with ${this.currentUser.email}...`, 'info');
           await this.pullCloudData();
           await this.pushAllStoreData();
         }
