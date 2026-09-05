@@ -137,7 +137,7 @@ input[type="number"] {
     inset-x: 0;
     bottom: 0;
     top: auto;
-    max-height: 88vh;
+    max-height: 90vh;
     border-radius: 24px 24px 0 0;
     transform: translateY(100%);
     transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -148,4 +148,25 @@ input[type="number"] {
   #pos-bill-cart-panel.mobile-cart-open {
     transform: translateY(0);
   }
+
+  /* Optimize tap targets for mobile phones */
+  button, select, input {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .app-view {
+    padding-bottom: 5rem !important;
+  }
+}
+
+/* Smooth active mobile bottom nav icon */
+.mobile-bottom-nav-btn.active {
+  color: #4f46e5 !important;
+  font-weight: 800 !important;
+}
+
+.mobile-bottom-nav-btn.active i {
+  color: #4f46e5 !important;
+  transform: scale(1.1);
 }

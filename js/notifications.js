@@ -1,9 +1,10 @@
 /**
  * QuickMart POS - Notification Center & Firebase / Web Push Notification System
- * Handles in-app notification center, audio chimes, low-stock alerts, sale notifications, and Web Push.
+ * Handles in-app notification center, audio chimes, low-stock alerts, sale notifications, and FCM Push Notification Pusher.
  */
 
 const NOTIF_STORAGE_KEY = 'pos_notifications';
+const FCM_TOKEN_KEY = 'pos_fcm_device_token';
 
 class NotificationManager {
   constructor() {
@@ -11,12 +12,19 @@ class NotificationManager {
     this.hasPushPermission = ('Notification' in window) && Notification.permission === 'granted';
     this.isMuted = localStorage.getItem('pos_sound_muted') === 'true';
     this.audioCtx = null;
+    this.fcmDeviceToken = localStorage.getItem(FCM_TOKEN_KEY) || this.generateDeviceToken();
   }
 
   init() {
     this.updateBadge();
     this.bindEvents();
     this.checkInitialStockAlerts();
+  }
+
+  generateDeviceToken() {
+    const token = 'fcm-dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem(FCM_TOKEN_KEY, token);
+    return token;
   }
 
   loadNotifications() {
@@ -30,7 +38,6 @@ class NotificationManager {
 
   saveNotifications() {
     try {
-      // Limit to 100 recent notifications
       if (this.notifications.length > 100) this.notifications.length = 100;
       localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(this.notifications));
       this.updateBadge();
@@ -80,12 +87,12 @@ class NotificationManager {
     }
 
     // Trigger Native Browser Web Push if permitted
-    if (this.hasPushPermission && document.visibilityState !== 'visible') {
+    if (this.hasPushPermission) {
       try {
         new Notification(title, {
           body: body,
-          icon: '/assets/icons/icon-192.png',
-          badge: '/assets/icons/badge-72.png',
+          icon: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=128&auto=format&fit=crop&q=80',
+          badge: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=72&auto=format&fit=crop&q=80',
           tag: notif.id
         });
       } catch (e) {
@@ -111,8 +118,8 @@ class NotificationManager {
       if (permission === 'granted') {
         this.hasPushPermission = true;
         this.notify({
-          title: 'Push Notifications Enabled',
-          body: 'You will receive instant alerts for low stock and counter sales.',
+          title: 'Push Notifications Enabled 🔔',
+          body: 'You will receive instant alerts for low stock, sales, and cloud sync.',
           type: 'info',
           icon: 'bell-ring'
         });
@@ -145,9 +152,7 @@ class NotificationManager {
       const ctx = this.getAudioContext();
       if (!ctx) return;
       const now = ctx.currentTime;
-      // High pleasant two-tone cash register chime
       const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
       const gain = ctx.createGain();
 
       osc1.type = 'triangle';
@@ -209,6 +214,122 @@ class NotificationManager {
     } catch (e) {}
   }
 
+  // --- FCM NOTIFICATION PUSHER MODAL ---
+  openFcmPusherModal() {
+    const modalHtml = `
+      <div id="fcm-pusher-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col">
+          
+          <!-- Header -->
+          <div class="bg-slate-900 p-4 text-white flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="send" class="w-5 h-5 text-indigo-400"></i>
+              <h3 class="font-bold text-sm">FCM / Web Push Notification Pusher</h3>
+            </div>
+            <button id="close-fcm-modal-btn" class="p-1.5 text-slate-400 hover:text-white rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+          </div>
+
+          <!-- Body -->
+          <form id="fcm-pusher-form" class="p-5 space-y-4 text-xs">
+            
+            <!-- Device Token Box -->
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-bold text-slate-700">FCM / Web Push Device Token:</span>
+                <button type="button" id="fcm-copy-token-btn" class="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-md transition-colors">
+                  Copy Token
+                </button>
+              </div>
+              <input type="text" readonly value="${this.fcmDeviceToken}" class="w-full bg-white px-2 py-1 border border-slate-300 rounded font-mono text-[10px] text-slate-600 focus:outline-none select-all">
+            </div>
+
+            <!-- Title -->
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Notification Title *</label>
+              <input type="text" id="fcm-push-title" required value="🔔 Counter Notice: New Sale Completed" placeholder="e.g. Low Stock Alert" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <!-- Body Message -->
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Notification Message / Body *</label>
+              <textarea id="fcm-push-body" rows="2" required placeholder="Type the push notification text here..." class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">Bill #INV-1005 for ₹1,250 has been recorded successfully.</textarea>
+            </div>
+
+            <!-- Type & Sound Trigger -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Notification Type & Sound</label>
+                <select id="fcm-push-type" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500">
+                  <option value="sale">💰 Sale (Cash Chime)</option>
+                  <option value="stock">⚠️ Low Stock Alert (Warning)</option>
+                  <option value="sync">☁️ Cloud Sync (Bell)</option>
+                  <option value="info">ℹ️ General Notice</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Browser Push Status</label>
+                <div class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold flex items-center justify-between text-[11px]">
+                  <span>${this.hasPushPermission ? '✅ Push Enabled' : '⚠️ Push Not Allowed'}</span>
+                  ${!this.hasPushPermission ? `<button type="button" id="fcm-modal-enable-push" class="text-indigo-600 font-bold hover:underline">Enable</button>` : ''}
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+              <button type="button" id="fcm-cancel-btn" class="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs">
+                Cancel
+              </button>
+              <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-1.5">
+                <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                <span>Push Notification Now</span>
+              </button>
+            </div>
+
+          </form>
+
+        </div>
+      </div>
+    `;
+
+    document.getElementById('fcm-pusher-modal')?.remove();
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    if (window.lucide) window.lucide.createIcons();
+
+    const modal = document.getElementById('fcm-pusher-modal');
+    document.getElementById('close-fcm-modal-btn')?.addEventListener('click', () => modal.remove());
+    document.getElementById('fcm-cancel-btn')?.addEventListener('click', () => modal.remove());
+
+    document.getElementById('fcm-copy-token-btn')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(this.fcmDeviceToken);
+      window.app?.showToast('FCM Token copied to clipboard!', 'success');
+    });
+
+    document.getElementById('fcm-modal-enable-push')?.addEventListener('click', async () => {
+      await this.requestPushPermission();
+      modal.remove();
+      this.openFcmPusherModal();
+    });
+
+    const form = document.getElementById('fcm-pusher-form');
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const title = document.getElementById('fcm-push-title').value.trim();
+      const body = document.getElementById('fcm-push-body').value.trim();
+      const type = document.getElementById('fcm-push-type').value;
+
+      this.notify({
+        title: title,
+        body: body,
+        type: type,
+        sound: true
+      });
+
+      window.app?.showToast('Push Notification dispatched!', 'success');
+      modal.remove();
+    });
+  }
+
   // --- NOTIFICATION CENTER MODAL / DROPDOWN ---
   toggleNotificationDropdown() {
     let panel = document.getElementById('notification-dropdown-panel');
@@ -228,6 +349,9 @@ class NotificationManager {
             <span class="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-black rounded-full">${this.getUnreadCount()} new</span>
           </div>
           <div class="flex items-center space-x-2">
+            <button id="notif-open-fcm-btn" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-indigo-300 font-bold text-[10px] rounded-lg border border-slate-700 flex items-center gap-1">
+              <i data-lucide="send" class="w-3 h-3"></i> FCM Pusher
+            </button>
             <button id="notif-mark-read-btn" class="text-[11px] text-slate-300 hover:text-white font-medium">Mark Read</button>
             <button id="notif-close-panel-btn" class="p-1 text-slate-400 hover:text-white rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button>
           </div>
@@ -249,7 +373,9 @@ class NotificationManager {
         <!-- Footer -->
         <div class="p-3 bg-white border-t border-slate-200 flex items-center justify-between text-xs">
           <button id="notif-clear-all-btn" class="text-slate-500 hover:text-rose-600 font-semibold">Clear All</button>
-          <div class="text-[10px] text-slate-400">FCM & In-App Alerts</div>
+          <button id="notif-open-fcm-footer-btn" class="text-indigo-600 font-bold hover:underline flex items-center gap-1 text-[11px]">
+            <i data-lucide="send" class="w-3 h-3"></i> Test FCM Push
+          </button>
         </div>
 
       </div>
@@ -262,6 +388,16 @@ class NotificationManager {
 
     const dropdown = document.getElementById('notification-dropdown-panel');
     document.getElementById('notif-close-panel-btn')?.addEventListener('click', () => dropdown.remove());
+
+    document.getElementById('notif-open-fcm-btn')?.addEventListener('click', () => {
+      dropdown.remove();
+      this.openFcmPusherModal();
+    });
+
+    document.getElementById('notif-open-fcm-footer-btn')?.addEventListener('click', () => {
+      dropdown.remove();
+      this.openFcmPusherModal();
+    });
 
     document.getElementById('notif-enable-push-btn')?.addEventListener('click', async () => {
       await this.requestPushPermission();
@@ -291,7 +427,7 @@ class NotificationManager {
         <div class="py-12 text-center text-slate-400">
           <i data-lucide="bell-off" class="w-8 h-8 mx-auto mb-2 opacity-30"></i>
           <p class="font-medium text-xs">No notifications yet</p>
-          <p class="text-[10px] text-slate-400 mt-0.5">Sale and stock alerts will appear here</p>
+          <p class="text-[10px] text-slate-400 mt-0.5">Sale, low stock, and cloud sync alerts will appear here</p>
         </div>
       `;
       if (window.lucide) window.lucide.createIcons();
@@ -303,7 +439,7 @@ class NotificationManager {
       const typeIcons = {
         sale: { icon: 'indian-rupee', color: 'bg-emerald-100 text-emerald-700' },
         stock: { icon: 'alert-triangle', color: 'bg-amber-100 text-amber-700' },
-        sync: { icon: 'cloud-check', color: 'bg-indigo-100 text-indigo-700' },
+        sync: { icon: 'refresh-cw', color: 'bg-indigo-100 text-indigo-700' },
         warning: { icon: 'alert-circle', color: 'bg-rose-100 text-rose-700' },
         info: { icon: 'bell', color: 'bg-slate-100 text-slate-700' }
       }[n.type] || { icon: 'bell', color: 'bg-slate-100 text-slate-700' };
@@ -350,7 +486,7 @@ class NotificationManager {
       if (outList.length > 0) {
         this.notify({
           title: 'Out of Stock Alert',
-          body: `${outList.length} items are currently out of stock. Please inward stock.`,
+          body: `${outList.length} items are out of stock. Please inward stock.`,
           type: 'warning',
           icon: 'alert-circle',
           sound: false
@@ -360,7 +496,7 @@ class NotificationManager {
       if (lowList.length > 0) {
         this.notify({
           title: 'Low Stock Warning',
-          body: `${lowList.length} items have fallen below their minimum threshold.`,
+          body: `${lowList.length} items have fallen below minimum threshold.`,
           type: 'stock',
           icon: 'alert-triangle',
           sound: false
@@ -375,6 +511,13 @@ class NotificationManager {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.toggleNotificationDropdown();
+      });
+    });
+
+    // FCM Pusher buttons in Settings
+    document.querySelectorAll('.open-fcm-pusher-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.openFcmPusherModal();
       });
     });
   }

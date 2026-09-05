@@ -109,18 +109,18 @@ const SAMPLE_DEMO_PRODUCTS = [
     shortName: 'Good Day 200g',
     categoryId: 'cat-3',
     brand: 'Britannia',
-    unit: 'Pack',
-    purchasePrice: 31.00,
-    sellingPrice: 38.00,
-    mrp: 42.00,
+    unit: 'Pcs',
+    purchasePrice: 35.00,
+    sellingPrice: 45.00,
+    mrp: 50.00,
     discountPercent: 0,
     taxPercent: 18,
-    currentStock: 40,
+    currentStock: 48,
     minStock: 10,
-    maxStock: 200,
+    maxStock: 150,
     photoUrl: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=300&auto=format&fit=crop&q=80',
-    description: 'Rich buttery cashewnut smile cookies',
-    supplierName: 'Britannia Depot',
+    description: 'Rich buttery crunchy delight biscuits',
+    supplierName: 'Britannia Agencies',
     isActive: true
   }
 ];
@@ -165,6 +165,7 @@ class DatabaseManager {
   saveSettings(newSettings) {
     const merged = { ...this.getSettings(), ...newSettings };
     localStorage.setItem(DB_KEYS.SETTINGS, JSON.stringify(merged));
+    window.supabaseSync?.pushAllStoreData();
     return merged;
   }
 
@@ -188,13 +189,14 @@ class DatabaseManager {
       cats.push(category);
     }
     localStorage.setItem(DB_KEYS.CATEGORIES, JSON.stringify(cats));
-    window.supabaseSync?.pushEntity('categories', category);
+    window.supabaseSync?.pushAllStoreData();
     return category;
   }
 
   deleteCategory(id) {
     const cats = this.getCategories().filter(c => c.id !== id);
     localStorage.setItem(DB_KEYS.CATEGORIES, JSON.stringify(cats));
+    window.supabaseSync?.pushAllStoreData();
     return true;
   }
 
@@ -251,9 +253,8 @@ class DatabaseManager {
 
     localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(prods));
 
-    // Realtime Supabase Sync
     const saved = isNew ? product : prods.find(p => p.id === product.id);
-    window.supabaseSync?.pushEntity('products', saved);
+    window.supabaseSync?.pushAllStoreData();
 
     return saved;
   }
@@ -261,6 +262,7 @@ class DatabaseManager {
   deleteProduct(id) {
     const prods = this.getProducts().filter(p => p.id !== id);
     localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(prods));
+    window.supabaseSync?.pushAllStoreData();
     return true;
   }
 
@@ -291,9 +293,7 @@ class DatabaseManager {
       referenceId: refId
     });
 
-    // Realtime Supabase Sync
-    window.supabaseSync?.pushEntity('products', prod);
-    if (movement) window.supabaseSync?.pushEntity('stock_movements', movement);
+    window.supabaseSync?.pushAllStoreData();
 
     return prod;
   }
@@ -352,8 +352,15 @@ class DatabaseManager {
       custs.push(customer);
     }
     localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(custs));
-    window.supabaseSync?.pushEntity('customers', customer);
+    window.supabaseSync?.pushAllStoreData();
     return customer;
+  }
+
+  deleteCustomer(id) {
+    const custs = this.getCustomers().filter(c => c.id !== id);
+    localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(custs));
+    window.supabaseSync?.pushAllStoreData();
+    return true;
   }
 
   // --- SALES & BILLING ---
@@ -460,12 +467,11 @@ class DatabaseManager {
         custs[cIdx].totalOrders = (parseInt(custs[cIdx].totalOrders) || 0) + 1;
         custs[cIdx].lastPurchasedAt = new Date().toISOString();
         localStorage.setItem(DB_KEYS.CUSTOMERS, JSON.stringify(custs));
-        window.supabaseSync?.pushEntity('customers', custs[cIdx]);
       }
     }
 
-    // 4. Realtime Supabase Sync
-    window.supabaseSync?.pushEntity('sales', saleRecord);
+    // 4. Cloud sync to Supabase
+    window.supabaseSync?.pushAllStoreData();
 
     return saleRecord;
   }
@@ -491,13 +497,14 @@ class DatabaseManager {
       expenses.unshift(expense);
     }
     localStorage.setItem(DB_KEYS.EXPENSES, JSON.stringify(expenses));
-    window.supabaseSync?.pushEntity('expenses', expense);
+    window.supabaseSync?.pushAllStoreData();
     return expense;
   }
 
   deleteExpense(id) {
     const expenses = this.getExpenses().filter(e => e.id !== id);
     localStorage.setItem(DB_KEYS.EXPENSES, JSON.stringify(expenses));
+    window.supabaseSync?.pushAllStoreData();
     return true;
   }
 
@@ -591,11 +598,13 @@ class DatabaseManager {
   // --- DEMO LOADER & RESET ---
   loadSampleDemoProducts() {
     localStorage.setItem(DB_KEYS.PRODUCTS, JSON.stringify(SAMPLE_DEMO_PRODUCTS));
+    window.supabaseSync?.pushAllStoreData();
     return true;
   }
 
   resetCleanDatabase() {
     this.init(true);
+    window.supabaseSync?.pushAllStoreData();
     return true;
   }
 
@@ -622,6 +631,7 @@ class DatabaseManager {
     if (dataObj.sales) localStorage.setItem(DB_KEYS.SALES, JSON.stringify(dataObj.sales));
     if (dataObj.stockMovements) localStorage.setItem(DB_KEYS.STOCK_MOVEMENTS, JSON.stringify(dataObj.stockMovements));
     if (dataObj.expenses) localStorage.setItem(DB_KEYS.EXPENSES, JSON.stringify(dataObj.expenses));
+    window.supabaseSync?.pushAllStoreData();
     return true;
   }
 }
